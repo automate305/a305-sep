@@ -1,0 +1,18 @@
+{
+  "name": "a305-sep",
+  "version": "1.0.0",
+  "description": "Automate305 Sales Engagement Platform — Supabase + Hostinger SMTP + Vercel",
+  "type": "module",
+  "scripts": {
+    "trigger":  "node scripts/daily-trigger.js",
+    "enroll":   "node scripts/enroll-contacts.js",
+    "dev":      "vercel dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.43.0",
+    "nodemailer":            "^6.9.13"
+  },
+  "devDependencies": {
+    "vercel": "^34.0.0"
+  }
+}

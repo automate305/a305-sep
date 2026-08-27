@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# Contact data (never commit lead lists)
+contacts.json
+*.contacts.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store

@@ -1,7 +1,11 @@
 // ============================================================
 // Automate305 SEP · /api/send.js
 // Vercel serverless function — receives daily trigger,
-// pulls today's queue from Supabase, sends via Hostinger SMTP
+// pulls today's queue from Supabase, sends via Hostinger SMTP.
+//
+// Multi-campaign: each queue item carries its sequence's campaign
+// ('aesthetic' | 'hvac') and a sender is picked from the SAME campaign,
+// so HVAC mail never goes out from the aesthetic mailboxes.
 // ============================================================
 
 import { createClient } from '@supabase/supabase-js'
@@ -12,63 +16,105 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY   // service role key — never anon
 )
 
+const MAX_STEP_FALLBACK = 10   // safety bound if a template lookup ever fails
+
 // ── HOSTINGER SMTP CONFIG ────────────────────────────────────
 // One transporter per sender (Hostinger requires auth per mailbox)
-function makeTransporter(senderEmail) {
+function makeTransporter(sender) {
   return nodemailer.createTransport({
-    host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true,   // SSL
+    host:   sender.host || 'smtp.hostinger.com',
+    port:   sender.port || 465,
+    secure: (sender.port || 465) === 465,   // 465 = implicit SSL
     auth: {
-      user: senderEmail,
-      pass: process.env[`SMTP_PASS_${senderEmail.split('@')[0].toUpperCase().replace(/[^A-Z]/g, '_')}`]
-      // Env var naming: matt@ → SMTP_PASS_MATT, don@ → SMTP_PASS_DON, etc.
+      user: sender.email,
+      pass: process.env[passEnvVar(sender.email)]
+      // Env var naming: matt@ → SMTP_PASS_MATT, cam@ → SMTP_PASS_CAM, etc.
     }
   })
 }
 
+function passEnvVar(email) {
+  return `SMTP_PASS_${email.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '_')}`
+}
+
 // ── TEMPLATE MERGE ───────────────────────────────────────────
+// Supports both the aesthetic variables (practice_name, sender_name) and
+// the HVAC/ColdIQ variables (company, signature, personalized_line, etc.).
 function mergeTemplate(text, contact, sender) {
-  return text
-    .replace(/{{first_name}}/g,    contact.first_name    || 'there')
-    .replace(/{{last_name}}/g,     contact.last_name     || '')
-    .replace(/{{practice_name}}/g, contact.practice_name || 'your practice')
-    .replace(/{{sender_name}}/g,   sender.name)
+  const area = contact.area || contact.city || 'South Florida'
+  return (text || '')
+    .replace(/{{first_name}}/g,             contact.first_name    || 'there')
+    .replace(/{{last_name}}/g,              contact.last_name     || '')
+    .replace(/{{practice_name}}/g,          contact.practice_name || 'your practice')
+    .replace(/{{company}}/g,                contact.company || contact.practice_name || 'your company')
+    .replace(/{{sender_name}}/g,            sender.name)
+    .replace(/{{signature}}/g,              sender.signature || sender.name)
+    .replace(/{{personalized_line}}/g,      contact.personalized_line ||
+             'I came across your company while looking at HVAC shops in the area.')
+    .replace(/{{personalized_paragraph}}/g, contact.personalized_paragraph ||
+             contact.personalized_line ||
+             'I came across your company while looking at HVAC shops in the area.')
+    .replace(/{{pain_point}}/g,             contact.pain_point || 'scheduling and dispatch')
+    .replace(/{{area}}/g,                   area)
+    .replace(/{{website_observation}}/g,    contact.website_observation ||
+             'There are a few quick wins that could help it convert more visitors into booked calls.')
 }
 
-// ── PICK AVAILABLE SENDER ────────────────────────────────────
-async function pickSender() {
-  const { data, error } = await supabase
-    .from('available_senders')
+// ── PICK AVAILABLE SENDER (campaign-scoped) ──────────────────
+async function pickSender(campaign) {
+  let query = supabase
+    .from('senders')
     .select('*')
+    .eq('active', true)
+    .order('sends_today', { ascending: true })
     .limit(1)
-    .single()
 
-  if (error || !data) throw new Error('No available senders today — limit reached or all inactive')
-  return data
+  if (campaign) query = query.eq('campaign', campaign)
+
+  const { data, error } = await query
+  const sender = data && data[0]
+
+  if (error) throw new Error(`Sender lookup failed: ${error.message}`)
+  if (!sender) throw new Error(`No active senders for campaign "${campaign}"`)
+  if (sender.sends_today >= sender.daily_limit) {
+    throw new Error(`Daily limit reached for campaign "${campaign}" (all senders maxed)`)
+  }
+  return sender
 }
 
-// ── ADVANCE ENROLLMENT ───────────────────────────────────────
-async function advanceEnrollment(enrollmentId, currentStep, delayDays) {
+// ── ADVANCE ENROLLMENT (N-step, correct per-step delay) ──────
+// Looks up the NEXT step's template to decide whether the sequence is
+// finished and, if not, how many days until that next step goes out
+// (delay_days = days after the previous step).
+async function advanceEnrollment(enrollmentId, sequenceId, currentStep) {
   const nextStep = currentStep + 1
-  const nextDate = new Date()
-  nextDate.setDate(nextDate.getDate() + delayDays)
 
-  if (nextStep > 3) {
-    // Sequence complete
+  const { data: nextTpl } = await supabase
+    .from('templates')
+    .select('delay_days')
+    .eq('sequence_id', sequenceId)
+    .eq('step', nextStep)
+    .maybeSingle()
+
+  if (!nextTpl || nextStep > MAX_STEP_FALLBACK) {
+    // No further step → sequence complete
     await supabase
       .from('enrollments')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', enrollmentId)
-  } else {
-    await supabase
-      .from('enrollments')
-      .update({
-        current_step:   nextStep,
-        next_send_date: nextDate.toISOString().split('T')[0]
-      })
-      .eq('id', enrollmentId)
+    return
   }
+
+  const nextDate = new Date()
+  nextDate.setDate(nextDate.getDate() + (nextTpl.delay_days || 0))
+
+  await supabase
+    .from('enrollments')
+    .update({
+      current_step:   nextStep,
+      next_send_date: nextDate.toISOString().split('T')[0]
+    })
+    .eq('id', enrollmentId)
 }
 
 // ── MAIN HANDLER ─────────────────────────────────────────────
@@ -103,24 +149,34 @@ export default async function handler(req, res) {
     for (const item of queue) {
 
       try {
-        // Pick a sender with capacity
-        const sender = await pickSender()
+        // Pick a sender with capacity, scoped to this item's campaign
+        const sender = await pickSender(item.campaign)
 
         // Merge template
         const subject = mergeTemplate(item.subject,   item, sender)
         const body    = mergeTemplate(item.body_text, item, sender)
 
+        // Replies route to the sender's configured inbox (aliases → main box)
+        const replyTo = sender.reply_to || sender.email
+        // One-click list-unsubscribe (RFC 8058) → routes to the reply inbox
+        const unsubMailto = `mailto:${replyTo}?subject=unsubscribe`
+
+        const footer =
+          `\n\n---\nDon't want to hear from me? Reply "unsubscribe" and I'll ` +
+          `take you off the list.`
+
         // Send via Hostinger SMTP
-        const transporter = makeTransporter(sender.email)
+        const transporter = makeTransporter(sender)
         await transporter.sendMail({
           from:    `"${sender.name}" <${sender.email}>`,
           to:      item.email,
           subject: subject,
-          text:    body,
-          // Reply-to routes back to the correct main inbox
-          replyTo: sender.email.includes('tamiko') || ['jen','jenny','jess','jessica','tami'].some(a => sender.email.startsWith(a))
-            ? 'tamiko@aestheticdevicepro.com'
-            : 'matt@aestheticdevicepro.com'
+          text:    body + footer,
+          replyTo: replyTo,
+          headers: {
+            'List-Unsubscribe':      `<${unsubMailto}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+          }
         })
 
         // Log the send
@@ -139,11 +195,11 @@ export default async function handler(req, res) {
           .update({ sends_today: sender.sends_today + 1 })
           .eq('id', sender.id)
 
-        // Advance enrollment to next step
-        await advanceEnrollment(item.enrollment_id, item.step, item.delay_days)
+        // Advance enrollment to next step (or complete)
+        await advanceEnrollment(item.enrollment_id, item.sequence_id, item.step)
 
-        results.sent.push({ email: item.email, step: item.step, sender: sender.email })
-        console.log(`✅ Sent step ${item.step} to ${item.email} via ${sender.email}`)
+        results.sent.push({ email: item.email, step: item.step, campaign: item.campaign, sender: sender.email })
+        console.log(`✅ Sent step ${item.step} (${item.campaign}) to ${item.email} via ${sender.email}`)
 
         // Throttle — 3s between sends to avoid SMTP rate limits
         await new Promise(r => setTimeout(r, 3000))

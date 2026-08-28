@@ -13,8 +13,11 @@
 //       "city": "Miami"
 //     }
 //   ],
-//   "sequence": "dp4"          // or "clearview"
+//   "sequence": "dp4"          // "clearview" | "hvac_a" | "hvac_b"
 //   "start_date": "2026-06-09" // optional, defaults to today
+//
+// HVAC contacts may also include: company, linkedin_url, personalized_line,
+// personalized_paragraph, pain_point, area, website_observation.
 // }
 // ============================================================
 
@@ -65,11 +68,19 @@ export default async function handler(req, res) {
           first_name:    contact.first_name,
           last_name:     contact.last_name,
           practice_name: contact.practice_name,
+          company:       contact.company,
           title:         contact.title,
           phone:         contact.phone,
           city:          contact.city,
           state:         contact.state || 'FL',
-          source:        contact.source || 'getleads'
+          linkedin_url:  contact.linkedin_url,
+          source:        contact.source || 'getleads',
+          // per-prospect personalization (used by the HVAC / ColdIQ copy)
+          personalized_line:      contact.personalized_line,
+          personalized_paragraph: contact.personalized_paragraph,
+          pain_point:             contact.pain_point,
+          area:                   contact.area,
+          website_observation:    contact.website_observation
         }, { onConflict: 'email' })
         .select()
         .single()

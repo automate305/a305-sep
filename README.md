@@ -184,5 +184,6 @@ marks the enrollment `completed` when no further step exists.
 | `/api/send` | POST | Process today's queue |
 | `/api/enroll` | POST | Add contacts to a sequence |
 | `/api/update-status` | POST | Mark replied/bounced/unsubscribed |
+| `/api/health` | GET | Which env vars are set (no secret needed) |
 
-All endpoints require `x-a305-secret` header.
+All endpoints require the `x-a305-secret` header, except `/api/health`.

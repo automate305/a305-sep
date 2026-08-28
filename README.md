@@ -202,5 +202,9 @@ marks the enrollment `completed` when no further step exists.
 | `/api/send` | POST | Process today's queue |
 | `/api/enroll` | POST | Add contacts to a sequence |
 | `/api/update-status` | POST | Mark replied/bounced/unsubscribed |
+| `/api/health` | GET | Config/health check (which env vars are set) |
 
-All endpoints require `x-a305-secret` header.
+The POST endpoints require the `x-a305-secret` header. `/api/health` is
+unauthenticated by design — it reports only which env vars are *set*
+(booleans, never values), so it's useful for debugging the very secret that
+would otherwise gate it.

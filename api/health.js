@@ -7,6 +7,14 @@
 // ============================================================
 
 export default function handler(req, res) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  // Never cache — a stale ready:false after you fix the env would send you
+  // chasing a ghost (Vercel caches edge responses aggressively otherwise).
+  res.setHeader('Cache-Control', 'no-store')
+
   const present = (name) => Boolean(process.env[name])
 
   const env = {

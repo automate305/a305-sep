@@ -75,6 +75,24 @@ into the JSON above before enrolling.
 > **A/B split:** send prospects with a weak/no website to `hvac_a` (free-website
 > carrot) and those with an established presence to `hvac_b` (ROI angle).
 
+**Converting a raw list to enroll JSON.** `scripts/convert-contacts.js` turns a
+prospect CSV — or the `cold-iq-gtm` `state.json` queue (which already carries
+per-prospect personalization and A/B assignments) — into enroll-ready files,
+split by sequence:
+
+```bash
+# From the cold-iq-gtm queue (keeps personalized lines + A/B split):
+node scripts/convert-contacts.js --queue ../cold-iq-gtm/gtm-outbound/data/state.json
+
+# From a CSV export (Apollo / getleads / Clay headers); --sequence optional:
+node scripts/convert-contacts.js --csv prospects.csv --sequence hvac_a
+```
+
+It writes `hvac_a.contacts.json` / `hvac_b.contacts.json` (matched by
+`.gitignore`, so lead data never lands in git), strips legal suffixes from
+company names, de-dupes by email, and prints the exact `enroll-contacts.js`
+commands to run next.
+
 ---
 
 ## Daily workflow
@@ -184,5 +202,9 @@ marks the enrollment `completed` when no further step exists.
 | `/api/send` | POST | Process today's queue |
 | `/api/enroll` | POST | Add contacts to a sequence |
 | `/api/update-status` | POST | Mark replied/bounced/unsubscribed |
+| `/api/health` | GET | Config/health check (which env vars are set) |
 
-All endpoints require `x-a305-secret` header.
+The POST endpoints require the `x-a305-secret` header. `/api/health` is
+unauthenticated by design — it reports only which env vars are *set*
+(booleans, never values), so it's useful for debugging the very secret that
+would otherwise gate it.

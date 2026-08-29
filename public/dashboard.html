@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automate305 SEP · Command Center</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#141a22; --panel-2:#1b2230; --border:#232c3a;
+      --text:#e8edf4; --muted:#8b98ab; --faint:#5c6a7e;
+      --accent:#34d399; --accent-dim:#0f2e26;
+      --blue:#5aa2ff; --amber:#f5b445; --red:#f87171; --violet:#a78bfa;
+      --radius:14px;
+    }
+    @media (prefers-color-scheme: light){
+      :root{
+        --bg:#f4f6f9; --panel:#ffffff; --panel-2:#f7f9fc; --border:#e3e8ef;
+        --text:#0f1722; --muted:#5a6b81; --faint:#8595aa;
+        --accent:#0f9d6b; --accent-dim:#e4f7ef;
+      }
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    a{color:var(--blue)}
+    .wrap{max-width:1180px; margin:0 auto; padding:20px 20px 64px}
+
+    /* header */
+    header{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:6px 0 22px}
+    .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-dim)}
+    h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
+    .sub{color:var(--muted);font-size:12.5px}
+    .spacer{flex:1}
+    .btn{
+      background:var(--panel-2);color:var(--text);border:1px solid var(--border);
+      border-radius:9px;padding:7px 13px;font-size:13px;font-weight:550;cursor:pointer;
+    }
+    .btn:hover{border-color:var(--faint)}
+    .btn.ghost{background:transparent;color:var(--muted)}
+    .stamp{color:var(--faint);font-size:12px}
+
+    /* kpi row */
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px}
+    .kpi{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px}
+    .kpi .n{font-size:26px;font-weight:680;letter-spacing:-.5px;line-height:1.1}
+    .kpi .l{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;margin-top:5px}
+    .kpi.accent .n{color:var(--accent)}
+
+    /* layout */
+    .grid{display:grid;grid-template-columns:1.35fr 1fr;gap:16px}
+    @media (max-width:860px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 17px;margin-bottom:16px}
+    .card h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin:0 0 13px;font-weight:600}
+    .card h2 .cnt{color:var(--faint);font-weight:500}
+
+    /* senders */
+    .campaign-label{display:flex;align-items:center;gap:8px;margin:14px 0 9px;font-size:12px;color:var(--muted)}
+    .campaign-label:first-of-type{margin-top:0}
+    .badge{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);color:var(--muted)}
+    .badge.hvac{color:var(--accent);border-color:var(--accent-dim);background:var(--accent-dim)}
+    .badge.aesthetic{color:var(--violet);border-color:#241f38;background:#1a1630}
+    @media (prefers-color-scheme: light){.badge.aesthetic{background:#f0ecff;border-color:#e2daff}}
+    .sender{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--border)}
+    .sender:first-child{border-top:none}
+    .sender .who{min-width:0;flex:1}
+    .sender .em{font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sender .em.off{color:var(--faint)}
+    .bar{height:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:99px;overflow:hidden;width:120px}
+    .bar > i{display:block;height:100%;background:var(--accent);border-radius:99px}
+    .bar.full > i{background:var(--amber)}
+    .sender .cap{color:var(--muted);font-size:12px;min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
+    .pill-off{font-size:10.5px;color:var(--faint);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+
+    /* tables / lists */
+    table{width:100%;border-collapse:collapse}
+    th,td{text-align:left;padding:8px 6px;font-size:13px;border-top:1px solid var(--border)}
+    th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-top:none}
+    td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+    .seqname{font-weight:550}
+    .row{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--border)}
+    .row:first-child{border-top:none}
+    .row .main{flex:1;min-width:0}
+    .row .em{font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .row .meta{color:var(--muted);font-size:12px}
+    .step{font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 6px;white-space:nowrap}
+    .st{font-size:11px;padding:1px 7px;border-radius:6px;white-space:nowrap}
+    .st.sent{color:var(--accent);background:var(--accent-dim)}
+    .st.failed{color:var(--red);background:#2a1414}
+    @media (prefers-color-scheme: light){.st.failed{background:#fdecec}}
+    .empty{color:var(--faint);font-size:13px;padding:14px 0;text-align:center}
+    .time{color:var(--faint);font-size:11.5px;white-space:nowrap}
+
+    /* login */
+    .gate{max-width:380px;margin:12vh auto 0;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:26px}
+    .gate h1{font-size:18px;margin:0 0 6px}
+    .gate p{color:var(--muted);margin:0 0 18px;font-size:13px}
+    .gate input{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:14px;margin-bottom:12px}
+    .gate .btn{width:100%;justify-content:center;background:var(--accent);color:#06231a;border-color:transparent;font-weight:650;padding:11px}
+    .err{color:var(--red);font-size:12.5px;min-height:16px;margin-top:2px}
+    [hidden]{display:none!important}
+  </style>
+</head>
+<body>
+  <!-- LOGIN -->
+  <div id="gate" class="gate">
+    <h1><span class="dot" style="display:inline-block;margin-right:8px"></span>SEP Command Center</h1>
+    <p>Enter the dashboard key to view live campaign data.</p>
+    <form id="gateForm">
+      <input id="key" type="password" placeholder="Dashboard key" autocomplete="current-password" autofocus>
+      <button class="btn" type="submit">Unlock</button>
+      <div id="gateErr" class="err"></div>
+    </form>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="app" class="wrap" hidden>
+    <header>
+      <span class="dot"></span>
+      <div>
+        <h1>Automate305 SEP · Command Center</h1>
+        <div class="sub">Multi-campaign cold email engine</div>
+      </div>
+      <div class="spacer"></div>
+      <span id="stamp" class="stamp"></span>
+      <button id="refresh" class="btn">Refresh</button>
+      <button id="logout" class="btn ghost">Lock</button>
+    </header>
+
+    <div id="kpis" class="kpis"></div>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h2>Pipeline by sequence</h2>
+          <div id="pipeline"></div>
+        </div>
+        <div class="card">
+          <h2>Recent activity <span class="cnt" id="recentCnt"></span></h2>
+          <div id="recent"></div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h2>Senders &amp; warmup</h2>
+          <div id="senders"></div>
+        </div>
+        <div class="card">
+          <h2>Today's queue <span class="cnt" id="queueCnt"></span></h2>
+          <div id="queue"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const KEY_STORE = 'a305_dash_key'
+const $ = s => document.querySelector(s)
+const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
+const num = n => (n==null?'0':Number(n).toLocaleString())
+
+function timeAgo(iso){
+  if(!iso) return ''
+  const d = (Date.now() - new Date(iso).getTime())/1000
+  if(d<60) return 'just now'
+  if(d<3600) return Math.floor(d/60)+'m ago'
+  if(d<86400) return Math.floor(d/3600)+'h ago'
+  return Math.floor(d/86400)+'d ago'
+}
+
+async function load(){
+  const key = localStorage.getItem(KEY_STORE)
+  if(!key){ showGate(); return }
+  try{
+    const r = await fetch('/api/dashboard', { headers: { 'x-a305-secret': key } })
+    if(r.status === 401){ localStorage.removeItem(KEY_STORE); showGate('That key was rejected.'); return }
+    if(!r.ok){ throw new Error('HTTP '+r.status) }
+    render(await r.json())
+  }catch(e){
+    $('#stamp').textContent = 'Error: '+e.message
+  }
+}
+
+function showGate(msg){
+  $('#app').hidden = true
+  $('#gate').hidden = false
+  $('#gateErr').textContent = msg || ''
+  $('#key').focus()
+}
+
+function render(d){
+  $('#gate').hidden = true
+  $('#app').hidden = false
+  $('#stamp').textContent = 'Updated ' + new Date(d.generated_at).toLocaleTimeString()
+
+  // KPIs
+  const k = d.kpis
+  const tiles = [
+    ['Sent today', k.sent_today, true],
+    ['Queued today', k.queue_today],
+    ['Active', k.active],
+    ['Replied', k.replied],
+    ['Completed', k.completed],
+    ['Contacts', k.contacts],
+    ['Unsubscribed', k.unsubscribed],
+    ['Bounced', k.bounced],
+  ]
+  $('#kpis').innerHTML = tiles.map(([l,n,acc]) =>
+    `<div class="kpi ${acc?'accent':''}"><div class="n">${num(n)}</div><div class="l">${l}</div></div>`).join('')
+
+  // Pipeline
+  const p = d.pipeline || []
+  $('#pipeline').innerHTML = p.length ? `
+    <table><thead><tr>
+      <th>Sequence</th><th>Campaign</th>
+      <th class="num">Active</th><th class="num">Replied</th>
+      <th class="num">Done</th><th class="num">Total</th>
+    </tr></thead><tbody>
+    ${p.map(r=>`<tr>
+      <td class="seqname">${esc(r.sequence)}</td>
+      <td><span class="badge ${esc(r.campaign)}">${esc(r.campaign)}</span></td>
+      <td class="num">${num(r.active)}</td>
+      <td class="num">${num(r.replied)}</td>
+      <td class="num">${num(r.completed)}</td>
+      <td class="num">${num(r.total)}</td>
+    </tr>`).join('')}
+    </tbody></table>`
+    : `<div class="empty">No one enrolled yet. Enroll contacts to start a sequence.</div>`
+
+  // Senders grouped by campaign
+  const senders = d.senders || []
+  const groups = {}
+  senders.forEach(s => (groups[s.campaign] = groups[s.campaign] || []).push(s))
+  $('#senders').innerHTML = Object.keys(groups).sort().map(camp => {
+    const rows = groups[camp].map(s => {
+      const pct = s.daily_limit>0 ? Math.min(100, Math.round(100*s.sends_today/s.daily_limit)) : 0
+      const full = s.daily_limit>0 && s.sends_today>=s.daily_limit
+      const off = !s.active || s.daily_limit===0
+      return `<div class="sender">
+        <div class="who"><div class="em ${off?'off':''}">${esc(s.email)}</div></div>
+        ${off ? `<span class="pill-off">${s.active?'limit 0':'inactive'}</span>`
+              : `<div class="bar ${full?'full':''}"><i style="width:${pct}%"></i></div>
+                 <div class="cap">${num(s.sends_today)}/${num(s.daily_limit)}</div>`}
+      </div>`
+    }).join('')
+    return `<div class="campaign-label"><span class="badge ${esc(camp)}">${esc(camp)}</span></div>${rows}`
+  }).join('') || `<div class="empty">No senders configured.</div>`
+
+  // Queue
+  const q = d.queue || []
+  $('#queueCnt').textContent = q.length ? `· ${q.length}` : ''
+  $('#queue').innerHTML = q.length ? q.slice(0,40).map(x=>`
+    <div class="row"><div class="main">
+      <div class="em">${esc(x.company || x.practice_name || x.email)}</div>
+      <div class="meta">${esc(x.email)} · ${esc(x.sequence_name)}</div>
+    </div><span class="step">step ${esc(x.step)}</span></div>`).join('')
+    : `<div class="empty">Nothing scheduled to send today.</div>`
+
+  // Recent
+  const rec = d.recent || []
+  $('#recentCnt').textContent = rec.length ? `· last ${rec.length}` : ''
+  $('#recent').innerHTML = rec.length ? rec.map(x=>`
+    <div class="row"><div class="main">
+      <div class="em">${esc(x.org || x.contact || '—')}</div>
+      <div class="meta">${esc(x.subject || '')}</div>
+    </div>
+    <span class="st ${esc(x.status)}">${esc(x.status)}</span>
+    <span class="time">${esc(timeAgo(x.sent_at))}</span></div>`).join('')
+    : `<div class="empty">No emails sent yet.</div>`
+}
+
+// events
+$('#gateForm').addEventListener('submit', e => {
+  e.preventDefault()
+  const v = $('#key').value.trim()
+  if(!v) return
+  localStorage.setItem(KEY_STORE, v)
+  $('#key').value = ''
+  load()
+})
+$('#refresh').addEventListener('click', load)
+$('#logout').addEventListener('click', () => { localStorage.removeItem(KEY_STORE); showGate() })
+
+load()
+</script>
+</body>
+</html>

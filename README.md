@@ -203,8 +203,29 @@ marks the enrollment `completed` when no further step exists.
 | `/api/enroll` | POST | Add contacts to a sequence |
 | `/api/update-status` | POST | Mark replied/bounced/unsubscribed |
 | `/api/health` | GET | Config/health check (which env vars are set) |
+| `/api/dashboard` | GET | Read-only aggregate data for the operator dashboard |
 
-The POST endpoints require the `x-a305-secret` header. `/api/health` is
-unauthenticated by design — it reports only which env vars are *set*
-(booleans, never values), so it's useful for debugging the very secret that
-would otherwise gate it.
+The POST endpoints and `/api/dashboard` require the `x-a305-secret` header
+(`/api/dashboard` accepts `DASHBOARD_PASSWORD` if set, else `WEBHOOK_SECRET`).
+`/api/health` is unauthenticated by design — it reports only which env vars
+are *set* (booleans, never values), so it's useful for debugging the very
+secret that would otherwise gate it.
+
+---
+
+## Operator dashboard
+
+`/dashboard.html` is a lightweight command center for watching the engine —
+open it in a browser and enter your dashboard key (the value of
+`DASHBOARD_PASSWORD`, or `WEBHOOK_SECRET` if that's unset).
+
+It shows, live from Supabase:
+- **KPIs** — sent today, queued today, active / replied / completed, contacts, unsubscribes, bounces
+- **Pipeline by sequence** — per-sequence funnel across both campaigns
+- **Senders & warmup** — each mailbox's `sends_today / daily_limit` with a warmup bar, grouped by campaign
+- **Today's queue** — who is scheduled to go out today
+- **Recent activity** — the latest sends and their status
+
+All Supabase access is server-side (`/api/dashboard` uses the service key); the
+browser only ever receives aggregated JSON — no secrets, no service key. The key
+you type is kept in that browser's `localStorage` only.

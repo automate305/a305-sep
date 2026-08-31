@@ -28,11 +28,20 @@
     <h1><span class="dot">●</span> Automate305 SEP</h1>
     <p>Sales engagement API is running. This service has no web UI — it exposes
        JSON endpoints only.</p>
-    <p>Endpoints (all POST, require the <code>x-a305-secret</code> header):</p>
+    <p>Endpoints (require the <code>x-a305-secret</code> header):</p>
     <ul>
-      <li><code>/api/send</code> — process today's queue</li>
-      <li><code>/api/enroll</code> — add contacts to a sequence</li>
-      <li><code>/api/update-status</code> — mark replied / bounced / unsubscribed</li>
+      <li><code>POST /api/send</code> — process today's send queue</li>
+      <li><code>POST /api/enroll</code> — add contacts to a sequence</li>
+      <li><code>POST /api/update-status</code> — mark replied / bounced / unsubscribed</li>
+      <li><code>POST /api/generate-sequence</code> — AI sequence generation</li>
+      <li><code>POST /api/approve-sequence</code> — DRAFT → APPROVED → ACTIVE lifecycle</li>
+      <li><code>POST /api/ingest-replies</code> — IMAP reply ingestion</li>
+      <li><code>POST /api/compute-scores</code> — recalculate mailbox health scores</li>
+      <li><code>GET /api/dns-check</code> — SPF/DKIM/DMARC/blacklist check</li>
+      <li><code>GET /api/hold-queue</code> — view held messages</li>
+      <li><code>POST /api/hold-queue</code> — approve or skip held items</li>
+      <li><code>POST /api/kill-switch</code> — toggle global kill switch</li>
+      <li><code>GET /api/dashboard</code> — full dashboard data (brand-scoped)</li>
     </ul>
     <p>Health &amp; config check (no auth): <a href="/api/health"><code>/api/health</code></a></p>
     <p>Operator dashboard: <a href="/dashboard.html"><code>/dashboard.html</code></a> (key required)</p>

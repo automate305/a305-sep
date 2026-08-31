@@ -26,11 +26,10 @@
       -webkit-font-smoothing:antialiased;
     }
     a{color:var(--blue)}
-    .wrap{max-width:1180px; margin:0 auto; padding:20px 20px 64px}
-
-    /* header */
+    .wrap{max-width:1280px; margin:0 auto; padding:20px 20px 64px}
     header{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:6px 0 22px}
     .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-dim)}
+    .dot.off{background:var(--red);box-shadow:0 0 0 4px #2a1414}
     h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
     .sub{color:var(--muted);font-size:12.5px}
     .spacer{flex:1}
@@ -40,41 +39,42 @@
     }
     .btn:hover{border-color:var(--faint)}
     .btn.ghost{background:transparent;color:var(--muted)}
+    .btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+    .btn.danger{background:#2a1414;border-color:var(--red);color:var(--red)}
     .stamp{color:var(--faint);font-size:12px}
-
-    /* kpi row */
-    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px}
+    .brand-switcher{display:flex;gap:6px;margin-bottom:18px}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:22px}
     .kpi{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:15px 16px}
     .kpi .n{font-size:26px;font-weight:680;letter-spacing:-.5px;line-height:1.1}
     .kpi .l{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;margin-top:5px}
     .kpi.accent .n{color:var(--accent)}
-
-    /* layout */
+    .kpi.warn .n{color:var(--amber)}
+    .kpi.bad .n{color:var(--red)}
     .grid{display:grid;grid-template-columns:1.35fr 1fr;gap:16px}
     @media (max-width:860px){.grid{grid-template-columns:1fr}}
     .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 17px;margin-bottom:16px}
     .card h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin:0 0 13px;font-weight:600}
     .card h2 .cnt{color:var(--faint);font-weight:500}
-
-    /* senders */
-    .campaign-label{display:flex;align-items:center;gap:8px;margin:14px 0 9px;font-size:12px;color:var(--muted)}
-    .campaign-label:first-of-type{margin-top:0}
     .badge{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);color:var(--muted)}
-    .badge.hvac{color:var(--accent);border-color:var(--accent-dim);background:var(--accent-dim)}
-    .badge.aesthetic{color:var(--violet);border-color:#241f38;background:#1a1630}
-    @media (prefers-color-scheme: light){.badge.aesthetic{background:#f0ecff;border-color:#e2daff}}
-    .sender{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--border)}
-    .sender:first-child{border-top:none}
-    .sender .who{min-width:0;flex:1}
-    .sender .em{font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .sender .em.off{color:var(--faint)}
-    .bar{height:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:99px;overflow:hidden;width:120px}
+    .badge.automate305{color:var(--accent);border-color:var(--accent-dim);background:var(--accent-dim)}
+    .badge.aestheticdevicepro{color:var(--violet);border-color:#241f38;background:#1a1630}
+    @media (prefers-color-scheme: light){.badge.aestheticdevicepro{background:#f0ecff;border-color:#e2daff}}
+    .mailbox{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--border)}
+    .mailbox:first-child{border-top:none}
+    .mailbox .who{min-width:0;flex:1}
+    .mailbox .em{font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mailbox .em.off{color:var(--faint)}
+    .bar{height:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:99px;overflow:hidden;width:100px}
     .bar > i{display:block;height:100%;background:var(--accent);border-radius:99px}
     .bar.full > i{background:var(--amber)}
-    .sender .cap{color:var(--muted);font-size:12px;min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
-    .pill-off{font-size:10.5px;color:var(--faint);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
-
-    /* tables / lists */
+    .mailbox .cap{color:var(--muted);font-size:12px;min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
+    .pill{font-size:10.5px;border:1px solid var(--border);border-radius:6px;padding:1px 6px;white-space:nowrap}
+    .pill.warm{color:var(--accent);border-color:var(--accent-dim)}
+    .pill.warming{color:var(--amber);border-color:#3d2e0a}
+    .pill.blocked{color:var(--red);border-color:#2a1414}
+    .pill.off{color:var(--faint)}
+    .pill.live{color:var(--accent);border-color:var(--accent-dim);background:var(--accent-dim)}
+    .pill.seed{color:var(--amber);border-color:#3d2e0a}
     table{width:100%;border-collapse:collapse}
     th,td{text-align:left;padding:8px 6px;font-size:13px;border-top:1px solid var(--border)}
     th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-top:none}
@@ -92,19 +92,32 @@
     @media (prefers-color-scheme: light){.st.failed{background:#fdecec}}
     .empty{color:var(--faint);font-size:13px;padding:14px 0;text-align:center}
     .time{color:var(--faint);font-size:11.5px;white-space:nowrap}
-
-    /* login */
+    .score{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-variant-numeric:tabular-nums}
+    .score.good{color:var(--accent)}
+    .score.ok{color:var(--amber)}
+    .score.bad{color:var(--red)}
+    .score-bar{display:flex;gap:3px;margin-top:4px}
+    .score-bar .seg{height:4px;border-radius:2px;flex:1}
+    .score-detail{font-size:11.5px;color:var(--muted);margin-top:3px}
+    .hold-item{padding:10px 0;border-top:1px solid var(--border)}
+    .hold-item:first-child{border-top:none}
+    .hold-item .reason{color:var(--amber);font-size:12px;margin-top:2px}
+    .hold-actions{display:flex;gap:6px;margin-top:6px}
+    .hold-actions button{font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer}
+    .hold-actions button.approve{border-color:var(--accent-dim);color:var(--accent)}
     .gate{max-width:380px;margin:12vh auto 0;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:26px}
     .gate h1{font-size:18px;margin:0 0 6px}
     .gate p{color:var(--muted);margin:0 0 18px;font-size:13px}
     .gate input{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:14px;margin-bottom:12px}
     .gate .btn{width:100%;justify-content:center;background:var(--accent);color:#06231a;border-color:transparent;font-weight:650;padding:11px}
     .err{color:var(--red);font-size:12.5px;min-height:16px;margin-top:2px}
+    .ai-panel{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .ai-panel .metric{font-size:13px}
+    .ai-panel .metric .val{font-size:20px;font-weight:650}
     [hidden]{display:none!important}
   </style>
 </head>
 <body>
-  <!-- LOGIN -->
   <div id="gate" class="gate">
     <h1><span class="dot" style="display:inline-block;margin-right:8px"></span>SEP Command Center</h1>
     <p>Enter the dashboard key to view live campaign data.</p>
@@ -115,13 +128,12 @@
     </form>
   </div>
 
-  <!-- DASHBOARD -->
   <div id="app" class="wrap" hidden>
     <header>
-      <span class="dot"></span>
+      <span id="statusDot" class="dot"></span>
       <div>
-        <h1>Automate305 SEP · Command Center</h1>
-        <div class="sub">Multi-campaign cold email engine</div>
+        <h1>SEP Command Center</h1>
+        <div class="sub">Multi-brand outbound engine</div>
       </div>
       <div class="spacer"></div>
       <span id="stamp" class="stamp"></span>
@@ -129,6 +141,7 @@
       <button id="logout" class="btn ghost">Lock</button>
     </header>
 
+    <div id="brandSwitcher" class="brand-switcher"></div>
     <div id="kpis" class="kpis"></div>
 
     <div class="grid">
@@ -138,14 +151,26 @@
           <div id="pipeline"></div>
         </div>
         <div class="card">
+          <h2>Hold queue <span class="cnt" id="holdCnt"></span></h2>
+          <div id="holdQueue"></div>
+        </div>
+        <div class="card">
           <h2>Recent activity <span class="cnt" id="recentCnt"></span></h2>
           <div id="recent"></div>
+        </div>
+        <div class="card">
+          <h2>AI spend (month-to-date)</h2>
+          <div id="aiSpend"></div>
         </div>
       </div>
       <div>
         <div class="card">
-          <h2>Senders &amp; warmup</h2>
-          <div id="senders"></div>
+          <h2>Mailboxes &amp; health</h2>
+          <div id="mailboxes"></div>
+        </div>
+        <div class="card">
+          <h2>Warmup board</h2>
+          <div id="warmup"></div>
         </div>
         <div class="card">
           <h2>Today's queue <span class="cnt" id="queueCnt"></span></h2>
@@ -160,6 +185,8 @@ const KEY_STORE = 'a305_dash_key'
 const $ = s => document.querySelector(s)
 const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
 const num = n => (n==null?'0':Number(n).toLocaleString())
+let currentBrand = null
+let dashKey = null
 
 function timeAgo(iso){
   if(!iso) return ''
@@ -170,16 +197,24 @@ function timeAgo(iso){
   return Math.floor(d/86400)+'d ago'
 }
 
+function scoreClass(s){ return s>=85?'good':s>=60?'ok':'bad' }
+
+async function api(path, opts={}){
+  const headers = { 'x-a305-secret': dashKey, ...opts.headers }
+  if(opts.body) headers['Content-Type'] = 'application/json'
+  const r = await fetch(path, { ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined })
+  if(r.status===401){ localStorage.removeItem(KEY_STORE); showGate('Session expired.'); throw new Error('auth') }
+  return r.json()
+}
+
 async function load(){
-  const key = localStorage.getItem(KEY_STORE)
-  if(!key){ showGate(); return }
+  dashKey = localStorage.getItem(KEY_STORE)
+  if(!dashKey){ showGate(); return }
   try{
-    const r = await fetch('/api/dashboard', { headers: { 'x-a305-secret': key } })
-    if(r.status === 401){ localStorage.removeItem(KEY_STORE); showGate('That key was rejected.'); return }
-    if(!r.ok){ throw new Error('HTTP '+r.status) }
-    render(await r.json())
+    const url = '/api/dashboard' + (currentBrand ? '?brand='+currentBrand : '')
+    render(await api(url))
   }catch(e){
-    $('#stamp').textContent = 'Error: '+e.message
+    if(e.message!=='auth') $('#stamp').textContent = 'Error: '+e.message
   }
 }
 
@@ -195,68 +230,144 @@ function render(d){
   $('#app').hidden = false
   $('#stamp').textContent = 'Updated ' + new Date(d.generated_at).toLocaleTimeString()
 
+  const kill = d.kpis.kill_switch
+  $('#statusDot').className = kill ? 'dot off' : 'dot'
+
+  // Brand switcher
+  const brands = d.brands || []
+  $('#brandSwitcher').innerHTML =
+    `<button class="btn ${!currentBrand?'active':''}" onclick="switchBrand(null)">All brands</button>` +
+    brands.map(b =>
+      `<button class="btn ${currentBrand===b.slug?'active':''}" onclick="switchBrand('${esc(b.slug)}')">${esc(b.display_name)}</button>`
+    ).join('')
+
   // KPIs
   const k = d.kpis
   const tiles = [
-    ['Sent today', k.sent_today, true],
-    ['Queued today', k.queue_today],
-    ['Active', k.active],
-    ['Replied', k.replied],
-    ['Completed', k.completed],
-    ['Contacts', k.contacts],
-    ['Unsubscribed', k.unsubscribed],
-    ['Bounced', k.bounced],
+    ['Replied', k.replied, 'accent'],
+    ['Sent today', k.sent_today, 'accent'],
+    ['Queued today', k.queue_today, ''],
+    ['Held', k.hold_queue, k.hold_queue>0?'warn':''],
+    ['Active', k.active, ''],
+    ['Completed', k.completed, ''],
+    ['Contacts', k.contacts, ''],
+    ['Unsubscribed', k.unsubscribed, ''],
+    ['Bounced', k.bounced, k.bounced>0?'bad':''],
   ]
-  $('#kpis').innerHTML = tiles.map(([l,n,acc]) =>
-    `<div class="kpi ${acc?'accent':''}"><div class="n">${num(n)}</div><div class="l">${l}</div></div>`).join('')
+  $('#kpis').innerHTML = tiles.map(([l,n,cls]) =>
+    `<div class="kpi ${cls}"><div class="n">${num(n)}</div><div class="l">${l}</div></div>`).join('') +
+    (kill ? `<div class="kpi bad"><div class="n">STOPPED</div><div class="l">Kill switch</div></div>` : '')
 
   // Pipeline
   const p = d.pipeline || []
   $('#pipeline').innerHTML = p.length ? `
     <table><thead><tr>
-      <th>Sequence</th><th>Campaign</th>
+      <th>Sequence</th><th>Brand</th><th>Campaign</th>
       <th class="num">Active</th><th class="num">Replied</th>
       <th class="num">Done</th><th class="num">Total</th>
     </tr></thead><tbody>
     ${p.map(r=>`<tr>
       <td class="seqname">${esc(r.sequence)}</td>
-      <td><span class="badge ${esc(r.campaign)}">${esc(r.campaign)}</span></td>
+      <td><span class="badge ${esc(r.brand)}">${esc(r.brand)}</span></td>
+      <td>${esc(r.campaign)}</td>
       <td class="num">${num(r.active)}</td>
       <td class="num">${num(r.replied)}</td>
       <td class="num">${num(r.completed)}</td>
       <td class="num">${num(r.total)}</td>
     </tr>`).join('')}
     </tbody></table>`
-    : `<div class="empty">No one enrolled yet. Enroll contacts to start a sequence.</div>`
+    : `<div class="empty">No enrollments yet.</div>`
 
-  // Senders grouped by campaign
-  const senders = d.senders || []
-  const groups = {}
-  senders.forEach(s => (groups[s.campaign] = groups[s.campaign] || []).push(s))
-  $('#senders').innerHTML = Object.keys(groups).sort().map(camp => {
-    const rows = groups[camp].map(s => {
-      const pct = s.daily_limit>0 ? Math.min(100, Math.round(100*s.sends_today/s.daily_limit)) : 0
-      const full = s.daily_limit>0 && s.sends_today>=s.daily_limit
-      const off = !s.active || s.daily_limit===0
-      return `<div class="sender">
-        <div class="who"><div class="em ${off?'off':''}">${esc(s.email)}</div></div>
-        ${off ? `<span class="pill-off">${s.active?'limit 0':'inactive'}</span>`
+  // Mailboxes with health
+  const mbs = d.mailboxes || []
+  const grouped = {}
+  mbs.forEach(m => (grouped[m.brand_slug||'unknown'] = grouped[m.brand_slug||'unknown'] || []).push(m))
+  $('#mailboxes').innerHTML = Object.keys(grouped).sort().map(brand => {
+    const rows = grouped[brand].map(m => {
+      const pct = m.daily_cap>0 ? Math.min(100, Math.round(100*m.sends_today/m.daily_cap)) : 0
+      const full = m.daily_cap>0 && m.sends_today>=m.daily_cap
+      const off = !m.active || m.send_mode==='OFF'
+      const sc = m.health_score
+      const scCls = sc!=null ? scoreClass(sc) : ''
+      return `<div class="mailbox">
+        <div class="who">
+          <div class="em ${off?'off':''}">${esc(m.address)}</div>
+          <div style="display:flex;gap:5px;margin-top:2px">
+            <span class="pill ${m.status.toLowerCase()}">${m.status}</span>
+            <span class="pill ${m.send_mode==='LIVE'?'live':'seed'}">${m.send_mode}</span>
+            ${sc!=null?`<span class="score ${scCls}">${sc}</span>`:''}
+          </div>
+        </div>
+        ${off ? `<span class="pill off">${m.active?m.send_mode:'inactive'}</span>`
               : `<div class="bar ${full?'full':''}"><i style="width:${pct}%"></i></div>
-                 <div class="cap">${num(s.sends_today)}/${num(s.daily_limit)}</div>`}
+                 <div class="cap">${num(m.sends_today)}/${num(m.daily_cap)}</div>`}
       </div>`
     }).join('')
-    return `<div class="campaign-label"><span class="badge ${esc(camp)}">${esc(camp)}</span></div>${rows}`
-  }).join('') || `<div class="empty">No senders configured.</div>`
+    return `<div style="margin-bottom:12px"><span class="badge ${esc(brand)}">${esc(brand)}</span>${rows}</div>`
+  }).join('') || `<div class="empty">No mailboxes.</div>`
+
+  // Health score detail
+  const scores = d.health_scores || []
+  if(scores.length > 0){
+    const latest = scores[0]
+    const mbsSection = document.querySelector('#mailboxes')
+    if(latest && !latest.hard_gate_failed){
+      const detail = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Latest score breakdown: ${esc(latest.address)}</div>
+        <div class="score-detail">Inbox placement: ${latest.inbox_placement_pts!=null?latest.inbox_placement_pts+'/40':'n/a (seed test required)'}</div>
+        <div class="score-detail">Bounce rate: ${latest.bounce_rate_pct}% = ${latest.bounce_rate_pts}/20</div>
+        <div class="score-detail">Complaint rate: ${latest.complaint_rate_pct}% = ${latest.complaint_rate_pts}/20</div>
+        <div class="score-detail">Postmaster: ${latest.postmaster_rep||'no data'} = ${latest.postmaster_pts}/10</div>
+        <div class="score-detail">Reply rate: ${latest.reply_rate_pct}% = ${latest.reply_rate_pts}/10</div>
+        ${latest.seed_test_missing?'<div class="score-detail" style="color:var(--amber)">Score capped at 60: seed test required</div>':''}
+      </div>`
+      mbsSection.insertAdjacentHTML('beforeend', detail)
+    }
+  }
+
+  // Warmup board
+  const warming = d.warming || []
+  $('#warmup').innerHTML = warming.length ? warming.map(w => {
+    const day = w.warmup_started_at ? Math.floor((Date.now() - new Date(w.warmup_started_at).getTime())/(86400000))+1 : '?'
+    const projDate = w.warmup_started_at && w.health_score>=85 && day>=21 ? 'Ready' :
+      w.warmup_started_at ? new Date(new Date(w.warmup_started_at).getTime() + 28*86400000).toLocaleDateString() : '?'
+    const sc = w.health_score
+    return `<div class="row">
+      <div class="main">
+        <div class="em">${esc(w.address)}</div>
+        <div class="meta">Day ${day} of warmup · Cap: ${w.daily_cap}/day · Mode: ${w.send_mode}</div>
+        ${w.status==='BLOCKED'?'<div style="color:var(--red);font-size:12px">BLOCKED: score below graduation threshold</div>':''}
+      </div>
+      ${sc!=null?`<span class="score ${scoreClass(sc)}">${sc}</span>`:`<span class="pill off">no score</span>`}
+      <span class="time">est. ${esc(projDate)}</span>
+    </div>`
+  }).join('') : `<div class="empty">No mailboxes warming up.</div>`
+
+  // Hold queue
+  const holds = d.hold_queue || []
+  $('#holdCnt').textContent = holds.length ? `· ${holds.length}` : ''
+  $('#holdQueue').innerHTML = holds.length ? holds.map(h => `
+    <div class="hold-item">
+      <div class="em">${esc(h.org || h.email)}</div>
+      <div class="meta">${esc(h.email)} · step ${h.step} · ${esc(h.subject)}</div>
+      <div class="reason">${esc(h.hold_reason)}</div>
+      <div class="meta">Expires: ${esc(timeAgo(h.expires_at))}</div>
+      <div class="hold-actions">
+        <button class="approve" onclick="holdAction('${h.id}','approve')">Approve</button>
+        <button onclick="holdAction('${h.id}','skip')">Skip</button>
+      </div>
+    </div>`).join('')
+    : `<div class="empty">No messages held for review.</div>`
 
   // Queue
   const q = d.queue || []
   $('#queueCnt').textContent = q.length ? `· ${q.length}` : ''
   $('#queue').innerHTML = q.length ? q.slice(0,40).map(x=>`
     <div class="row"><div class="main">
-      <div class="em">${esc(x.company || x.practice_name || x.email)}</div>
-      <div class="meta">${esc(x.email)} · ${esc(x.sequence_name)}</div>
+      <div class="em">${esc(x.org || x.email)}</div>
+      <div class="meta">${esc(x.email)}</div>
     </div><span class="step">step ${esc(x.step)}</span></div>`).join('')
-    : `<div class="empty">Nothing scheduled to send today.</div>`
+    : `<div class="empty">Nothing queued.</div>`
 
   // Recent
   const rec = d.recent || []
@@ -266,23 +377,43 @@ function render(d){
       <div class="em">${esc(x.org || x.contact || '—')}</div>
       <div class="meta">${esc(x.subject || '')}</div>
     </div>
+    <span class="badge ${esc(x.brand||'')}">${esc(x.brand||'')}</span>
     <span class="st ${esc(x.status)}">${esc(x.status)}</span>
     <span class="time">${esc(timeAgo(x.sent_at))}</span></div>`).join('')
     : `<div class="empty">No emails sent yet.</div>`
+
+  // AI Spend
+  const ai = d.ai_spend || {}
+  $('#aiSpend').innerHTML = `<div class="ai-panel">
+    <div class="metric"><div class="val">$${num(ai.total||0)}</div><div class="meta">Spent this month</div></div>
+    <div class="metric"><div class="val">$${num(ai.budget||0)}</div><div class="meta">Budget</div></div>
+    <div class="metric"><div class="val">$${num(ai.remaining||0)}</div><div class="meta">Remaining</div></div>
+  </div>`
 }
 
-// events
+window.switchBrand = function(slug){
+  currentBrand = slug
+  load()
+}
+
+window.holdAction = async function(id, action){
+  try{
+    await api('/api/hold-queue', { method:'POST', body:{ queue_item_id:id, action } })
+    load()
+  }catch(e){}
+}
+
 $('#gateForm').addEventListener('submit', e => {
   e.preventDefault()
   const v = $('#key').value.trim()
   if(!v) return
   localStorage.setItem(KEY_STORE, v)
+  dashKey = v
   $('#key').value = ''
   load()
 })
 $('#refresh').addEventListener('click', load)
-$('#logout').addEventListener('click', () => { localStorage.removeItem(KEY_STORE); showGate() })
-
+$('#logout').addEventListener('click', () => { localStorage.removeItem(KEY_STORE); dashKey=null; showGate() })
 load()
 </script>
 </body>

@@ -29,6 +29,34 @@ async function triggerSend() {
 
   await resetDailySends()
 
+  // Ingest replies before sending (pauses sequences on reply, suppresses bounces)
+  console.log('📥 Ingesting replies...')
+  const ingestRes = await fetch(`${WEBHOOK_URL}/api/ingest-replies`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-a305-secret': WEBHOOK_SECRET },
+    body: JSON.stringify({})
+  })
+  if (ingestRes.ok) {
+    const ingestData = await ingestRes.json()
+    console.log(`   ${ingestData.total_ingested || 0} messages ingested\n`)
+  } else {
+    console.log('   ⚠️  Reply ingestion failed, continuing with send\n')
+  }
+
+  // Compute health scores
+  console.log('📊 Computing health scores...')
+  const scoreRes = await fetch(`${WEBHOOK_URL}/api/compute-scores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-a305-secret': WEBHOOK_SECRET },
+    body: JSON.stringify({})
+  })
+  if (scoreRes.ok) {
+    const scoreData = await scoreRes.json()
+    console.log(`   ${scoreData.scores?.length || 0} scores computed\n`)
+  } else {
+    console.log('   ⚠️  Score computation failed, continuing with send\n')
+  }
+
   console.log('📤 Triggering send webhook...\n')
 
   const res = await fetch(`${WEBHOOK_URL}/api/send`, {

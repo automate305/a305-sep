@@ -6,10 +6,13 @@
   "scripts": {
     "trigger":  "node scripts/daily-trigger.js",
     "enroll":   "node scripts/enroll-contacts.js",
+    "test":     "node --test tests/gate-logic.test.js",
     "dev":      "vercel dev"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.0",
+    "imap":                  "^0.8.19",
+    "mailparser":            "^3.7.1",
     "nodemailer":            "^6.9.13"
   },
   "devDependencies": {

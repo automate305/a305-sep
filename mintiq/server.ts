@@ -2,7 +2,7 @@ import "dotenv/config";
 import path from "node:path";
 import fs from "node:fs";
 import express from "express";
-import { createApp } from "./server/app.ts";
+import { createApp } from "./server/app.js";
 
 /** Local dev + self-hosted runner. On Vercel, api/index.ts is the entry point instead. */
 async function main() {

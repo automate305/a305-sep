@@ -1,4 +1,4 @@
-import type { AgentEvent, DealMemo, IntakeRequest } from "./schema.ts";
+import type { AgentEvent, DealMemo, IntakeRequest } from "./schema.js";
 
 /**
  * A fictional sample deal so MintIQ can be demoed with no API key and no network.

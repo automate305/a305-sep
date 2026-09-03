@@ -5,7 +5,7 @@ import { SAMPLE_MEMO, SAMPLE_INTAKE, SAMPLE_REPLAY } from "../shared/sample.ts";
 import type { AgentEvent, IntakeRequest } from "../shared/schema.ts";
 
 /** Vercel caps request bodies at ~4.5 MB; keep uploads comfortably under it. */
-export const MAX_BODY = "4mb";
+export const MAX_BODY = process.env.MINTIQ_MAX_BODY || "4mb";
 
 function sse(res: Response) {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");

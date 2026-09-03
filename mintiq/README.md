@@ -54,6 +54,7 @@ hosted demo. Self-host with `npm start` behind a reverse proxy to raise the limi
 | `ANTHROPIC_API_KEY` | — | Required for live analysis |
 | `MINTIQ_MODEL` | `claude-opus-5` | Model for every stage |
 | `MINTIQ_SEARCHES_PER_AGENT` | `6` | Web-search budget per Tier 1 analyst |
+| `MINTIQ_MAX_BODY` | `4mb` | Request body cap for uploads (raise when self-hosting) |
 | `PORT` | `3000` | Local server port |
 
 ## Cost and timing

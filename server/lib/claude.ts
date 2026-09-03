@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { AgentEvent, StageId } from "../../shared/schema.ts";
+import type { AgentEvent, StageId } from "../../shared/schema.js";
 
 export const MODEL = process.env.MINTIQ_MODEL || "claude-opus-5";
 

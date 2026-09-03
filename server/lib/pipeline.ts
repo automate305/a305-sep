@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { DealMemoSchema, type AgentEvent, type DealMemo, type IntakeFile, type IntakeRequest } from "../../shared/schema.ts";
-import { runStage, type Emit, type Usage, MODEL } from "./claude.ts";
-import { CASES_PROMPT, FINANCIALS_PROMPT, RESEARCHER_PROMPTS, SYNTHESIS_PROMPT, describeIntake } from "./prompts.ts";
+import { DealMemoSchema, type AgentEvent, type DealMemo, type IntakeFile, type IntakeRequest } from "../../shared/schema.js";
+import { runStage, type Emit, type Usage, MODEL } from "./claude.js";
+import { CASES_PROMPT, FINANCIALS_PROMPT, RESEARCHER_PROMPTS, SYNTHESIS_PROMPT, describeIntake } from "./prompts.js";
 
 const RESEARCH_SEARCH_BUDGET = Number(process.env.MINTIQ_SEARCHES_PER_AGENT || 6);
 

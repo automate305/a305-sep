@@ -1,4 +1,4 @@
-import type { IntakeRequest } from "../../shared/schema.ts";
+import type { IntakeRequest } from "../../shared/schema.js";
 
 /**
  * Shared context about Mint Financial Group that every agent receives.

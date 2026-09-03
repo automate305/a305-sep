@@ -1,8 +1,8 @@
 import express, { type Request, type Response } from "express";
-import { runCommittee } from "./lib/pipeline.ts";
-import { MODEL } from "./lib/claude.ts";
-import { SAMPLE_MEMO, SAMPLE_INTAKE, SAMPLE_REPLAY } from "../shared/sample.ts";
-import type { AgentEvent, IntakeRequest } from "../shared/schema.ts";
+import { runCommittee } from "./lib/pipeline.js";
+import { MODEL } from "./lib/claude.js";
+import { SAMPLE_MEMO, SAMPLE_INTAKE, SAMPLE_REPLAY } from "../shared/sample.js";
+import type { AgentEvent, IntakeRequest } from "../shared/schema.js";
 
 /** Vercel caps request bodies at ~4.5 MB; keep uploads comfortably under it. */
 export const MAX_BODY = process.env.MINTIQ_MAX_BODY || "4mb";

@@ -70,6 +70,35 @@ replays a recorded committee run and a fictional memo. Nothing in the sample is 
 Vercel caps request bodies at about 4.5 MB, so uploads are limited to 2.8 MB of raw files in the
 hosted demo. Self-host with `npm start` behind a reverse proxy to raise the limit.
 
+## Intake webhook: Mint's pre-qual form → MintIQ → advisor inbox
+
+MintIQ sits behind Mint's public "Capital Pre-Qualification" form. When a submission lands,
+the form (or Zapier / Make / the portal) POSTs it to MintIQ, the committee runs in the
+background, and the finished memo is emailed to the advisor with a share link.
+
+```
+POST /api/intake-webhook
+x-mintiq-secret: <MINTIQ_WEBHOOK_SECRET>
+Content-Type: application/json
+
+{ "Primary Goal": "Business Line of Credit", "Legal Business Name": "Acme Corp LLC",
+  "First Name": "John", "Last Name": "Doe", "Email": "john@acme.com",
+  "Gross Annual Revenue": "$2 Million – $10 Million+", "website": "acme.com",
+  "city": "Miami", "state": "FL" }
+```
+
+Field names are matched loosely (spaces, dashes, camelCase, nesting), so the form can be
+wired without renaming anything. Response is `202 { memo_url, notify_to, eta_seconds }`;
+the memo appears at `memo_url` and in the inbox a few minutes later. Recipient is
+`notify_email` in the payload, else `MINTIQ_NOTIFY_TO`.
+
+Send `{ "sample": true }` to run the loop end to end with the fictional sample deal at no
+API cost. Useful for the first demo: submit, then watch the email arrive.
+
+Memos are stored in Supabase (`supabase/schema.sql`, table `mintiq_memos`) and served at
+`/m/<token>`. Links are unguessable but not authenticated; treat them like a private document
+link. Interactive runs from the UI are saved the same way and show a **Share** button.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -85,6 +114,13 @@ hosted demo. Self-host with `npm start` behind a reverse proxy to raise the limi
 | `MINTIQ_SEARCHES_PER_AGENT` | `6` | Web-search budget per Tier 1 analyst |
 | `MINTIQ_MAX_BODY` | `4mb` | Request body cap for uploads (raise when self-hosting) |
 | `PORT` | `3000` | Local server port |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | — | Memo archive (same names as a305-sep). Without them memos are in-memory only |
+| `MINTIQ_WEBHOOK_SECRET` | — | Enables `/api/intake-webhook`; sent as `x-mintiq-secret` |
+| `MINTIQ_PUBLIC_URL` | request host | Base URL used in memo links and emails |
+| `MINTIQ_SMTP_USER`, `MINTIQ_SMTP_PASS` | — | Enables memo email (Hostinger SMTP by default) |
+| `MINTIQ_SMTP_HOST`, `MINTIQ_SMTP_PORT` | `smtp.hostinger.com`, `465` | SMTP overrides |
+| `MINTIQ_FROM` | the SMTP user | From header |
+| `MINTIQ_NOTIFY_TO` | — | Default recipient(s) for webhook memos |
 
 ## Cost and timing
 

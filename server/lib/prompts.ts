@@ -42,6 +42,10 @@ export function describeIntake(intake: IntakeRequest): string {
   return lines.join("\n");
 }
 
+export function searchBudgetNote(n: number): string {
+  return `SEARCH BUDGET: you have exactly ${n} web searches for this task. Plan them: put the business name in quotes with the city first, then the specific sources you need. Do not repeat a query. When the budget is spent, write the report from what you have and state plainly what could not be checked; a partial, sourced report is expected and useful.`;
+}
+
 export const RESEARCHER_PROMPTS: Record<string, { system: string; task: string }> = {
   profile: {
     system: `${MINT_CONTEXT}
@@ -55,7 +59,7 @@ Build a verified operating profile of the applicant. Use web search aggressively
 4. Licenses and certifications (state contractor license numbers, DOT/MC numbers for carriers, etc.) and whether they appear active.
 5. Revenue scale estimate with your reasoning (headcount, fleet, reviews velocity, project size). Label it as an estimate.
 6. Website and digital maturity (booking, financing offers, careers page = growth signal).
-Finish with a section titled VERIFIED FACTS (bulleted, each with its source URL) and a section titled ESTIMATES.`,
+Finish with a section titled VERIFIED FACTS (bulleted, each with its source URL) and a section titled ESTIMATES. Keep the whole report under 600 words; dense bullets beat prose.`,
   },
   reputation: {
     system: `${MINT_CONTEXT}
@@ -68,7 +72,7 @@ Assess customer sentiment and social proof the way an advisor would before a fir
 3. Employee sentiment signals (Indeed/Glassdoor) and hiring activity (open roles = growth).
 4. Any press, awards, community involvement, or negative news.
 5. Social proof strength on a 1–10 scale with rationale.
-Finish with a section titled VERIFIED FACTS (bulleted, each with its source URL) and a section titled ESTIMATES.`,
+Finish with a section titled VERIFIED FACTS (bulleted, each with its source URL) and a section titled ESTIMATES. Keep the whole report under 600 words; dense bullets beat prose.`,
   },
   records: {
     system: `${MINT_CONTEXT}
@@ -94,7 +98,7 @@ Explain the sector and local-market context that will shape this borrower's cash
 3. How lenders generally view this sector today and what collateral is usually available (fleet, equipment, receivables).
 4. Local competitive intensity and any consolidation/private-equity roll-up activity that could be an exit or a threat.
 5. Industry outlook rating for lending purposes: FAVORABLE / NEUTRAL / CAUTIOUS with rationale.
-Finish with a section titled VERIFIED FACTS (bulleted, each with its source URL) and a section titled ESTIMATES.`,
+Finish with a section titled VERIFIED FACTS (bulleted, each with its source URL) and a section titled ESTIMATES. Keep the whole report under 600 words; dense bullets beat prose.`,
   },
 };
 
@@ -110,7 +114,7 @@ You receive the applicant's uploaded financial documents (bank statements, P&L, 
 4. EXISTING OBLIGATIONS: every recurring debt payment you can identify (creditor, amount, frequency). Explicitly flag daily or weekly ACH debits that look like merchant cash advances, and estimate the total monthly MCA burden.
 5. UNDERWRITING METRICS: average monthly deposits, average daily balance (approx), estimated DSCR after existing debt, debt-to-revenue, deposit concentration, seasonality.
 6. RED FLAGS and GREEN FLAGS.
-Output clearly labeled sections. Where a figure is unavailable, write "not in documents".`,
+Output clearly labeled sections. Where a figure is unavailable, write "not in documents". Keep it under 700 words.`,
 };
 
 export const CASES_PROMPT = {
@@ -129,7 +133,9 @@ Then PRODUCT FIT:
 - If the borrower carries MCA positions, quantify the monthly cash-flow relief from consolidating into a monthly-payment term loan.
 - Pre-underwriting fit score 0–100 using this rubric: start at 50; +0–15 revenue scale vs Mint sweet spot; +0–10 cash-flow consistency; +0–10 time in business & operating stability; +0–10 reputation & social proof; -0–15 public-records risk; -0–15 existing leverage/stacking; +/-0–10 industry outlook. Show the arithmetic.
 - Confidence (low/medium/high) based on how much was verified versus estimated.
-- Information gaps the advisor must close before a term sheet.`,
+- Information gaps the advisor must close before a term sheet.
+
+Keep the entire response under 800 words. Tight bullets; no restating the research.`,
 };
 
 export const SYNTHESIS_PROMPT = {

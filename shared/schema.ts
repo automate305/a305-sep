@@ -45,26 +45,26 @@ export const DealMemoSchema = z.object({
   verdict: z.object({
     headline: z.string().describe("One-line verdict, e.g. 'Strong term-loan candidate with MCA cleanup upside'"),
     summary: z.string().describe("3–5 sentence executive summary written for a senior capital advisor"),
-    fit_score: z.number().int().min(0).max(100),
+    fit_score: z.number(),
     confidence: z.enum(["low", "medium", "high"]),
     recommended_product: z.enum(MINT_PRODUCTS),
     recommended_structure: z.string().describe("e.g. '$650K structured term loan, 48–60 months, fixed monthly payments, secured by fleet and equipment'"),
     suggested_range: z.string().describe("e.g. '$500K – $750K'"),
-    key_takeaways: z.array(z.string()).min(3).max(6),
-    next_steps: z.array(z.string()).min(2).max(6).describe("Concrete actions for the Mint advisor"),
-    talking_points: z.array(z.string()).min(2).max(5).describe("What the advisor should say on the first call"),
+    key_takeaways: z.array(z.string()),
+    next_steps: z.array(z.string()).describe("2–6 concrete actions for the Mint advisor"),
+    talking_points: z.array(z.string()).describe("2–5 lines the advisor should say on the first call"),
   }),
   score_breakdown: z.array(
     z.object({
       factor: z.string(),
-      score: z.number().int().min(0).max(10),
+      score: z.number().describe("integer 0–10"),
       rationale: z.string(),
     }),
-  ).min(5).max(8),
+  ).describe("5–8 factors mirroring the rubric"),
   cases: z.object({
-    upside: z.object({ title: z.string(), thesis: z.string(), drivers: z.array(z.string()).min(2).max(5) }),
-    downside: z.object({ title: z.string(), thesis: z.string(), drivers: z.array(z.string()).min(2).max(5) }),
-    base: z.object({ title: z.string(), thesis: z.string(), drivers: z.array(z.string()).min(2).max(5) }),
+    upside: z.object({ title: z.string(), thesis: z.string(), drivers: z.array(z.string()) }),
+    downside: z.object({ title: z.string(), thesis: z.string(), drivers: z.array(z.string()) }),
+    base: z.object({ title: z.string(), thesis: z.string(), drivers: z.array(z.string()) }),
   }),
   risk_flags: z.array(
     z.object({
@@ -82,12 +82,12 @@ export const DealMemoSchema = z.object({
     existing_obligations: z.array(
       z.object({ creditor: z.string(), type: z.string(), payment: z.string(), frequency: z.string() }),
     ),
-    nsf_count: z.number().int().nullable(),
+    nsf_count: z.number().nullable(),
     analyst_notes: z.string(),
   }).nullable().describe("null when no financial documents were provided"),
   reputation: z.object({
     google_rating: z.number().nullable(),
-    google_review_count: z.number().int().nullable(),
+    google_review_count: z.number().nullable(),
     yelp_rating: z.number().nullable(),
     bbb_rating: z.string().nullable(),
     sentiment_summary: z.string(),
@@ -101,10 +101,10 @@ export const DealMemoSchema = z.object({
       source_url: z.string().nullable(),
       date: z.string().nullable(),
     }),
-  ).min(4),
+  ).describe("at least 4, spread across categories"),
   briefing_script: z.array(
     z.object({ speaker: z.enum(["Analyst", "Advisor"]), line: z.string() }),
-  ).min(8).max(18).describe("A two-voice 60–90 second audio briefing for the deal desk"),
+  ).describe("8–18 lines: a two-voice 60–90 second audio briefing for the deal desk"),
   disclaimer: z.string(),
 });
 
@@ -155,6 +155,7 @@ export type AgentEvent =
   | { type: "text"; stage: StageId; text: string }
   | { type: "memo"; memo: DealMemo }
   | { type: "saved"; token: string; url: string }
+  | { type: "stage_output"; stage: StageId; text: string | null; usage: { input_tokens: number; output_tokens: number; searches: number } }
   | { type: "stats"; duration_ms: number; input_tokens: number; output_tokens: number; searches: number }
   | { type: "error"; message: string; stage?: StageId }
   | { type: "done" };

@@ -120,7 +120,7 @@ export function DealMemoView({ memo, stats, onBack, onReset, isSample, shareUrl 
             <div className="flex items-center gap-2 mb-3 text-[10px] uppercase tracking-[0.22em] text-gold-600"><CheckCircle2 className="w-3.5 h-3.5" /> Key takeaways</div>
             <ul className="space-y-2.5 text-sm text-navy-800">{v.key_takeaways.map((t, i) => <li key={i} className="flex gap-2"><span className="mt-2 w-1.5 h-1.5 rounded-full bg-gold-500 shrink-0" />{t}</li>)}</ul>
           </div>
-          <div className="card p-6 bg-navy-900 text-white border-navy-700">
+          <div className="rounded-xl border border-navy-700 p-6 text-white" style={{ background: "#0b1530" }}>
             <div className="flex items-center gap-2 mb-3 text-[10px] uppercase tracking-[0.22em] text-gold-400"><Phone className="w-3.5 h-3.5" /> First-call talking points</div>
             <ul className="space-y-3 text-sm">{v.talking_points.map((t, i) => <li key={i} className="font-serif text-lg leading-snug italic text-white/95">“{t}”</li>)}</ul>
           </div>

@@ -4,7 +4,7 @@ import { MintIQLogo } from "./components/Logo";
 import { IntakeForm } from "./components/IntakeForm";
 import { Committee, emptyStages, type StageMap } from "./components/Committee";
 import { DealMemoView, type RunStats } from "./components/DealMemo";
-import { analyze, fetchMemo, fetchSample, health, replay } from "./lib/api";
+import { analyzeStaged, fetchMemo, fetchSample, health, replay } from "./lib/api";
 import type { AgentEvent, DealMemo, IntakeRequest } from "../shared/schema";
 
 type View = "intake" | "committee" | "memo" | "shared";
@@ -79,6 +79,7 @@ export default function App() {
       case "stats": setStats({ duration_ms: e.duration_ms, input_tokens: e.input_tokens, output_tokens: e.output_tokens, searches: e.searches }); break;
       case "error": setError(e.message); break;
       case "done": setRunning(false); break;
+      default: break;
     }
   };
 
@@ -94,7 +95,7 @@ export default function App() {
   const run = async (intake: IntakeRequest) => {
     const controller = begin(intake.business_name, false);
     try {
-      await analyze(intake, onEvent, controller.signal);
+      await analyzeStaged(intake, onEvent, controller.signal);
     } catch (err) {
       if ((err as Error).name !== "AbortError") setError((err as Error).message);
     } finally {

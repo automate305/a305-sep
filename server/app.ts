@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from "express";
-import { runCommittee } from "./lib/pipeline.js";
+import { runCommittee, runResearch, runFinancials, runCases, runSynthesis, buildResearchPack, RESEARCH_STAGES, type ResearchStage, type StageOutputs } from "./lib/pipeline.js";
+import type { Usage } from "./lib/claude.js";
 import { MODEL } from "./lib/claude.js";
 import { SAMPLE_MEMO, SAMPLE_INTAKE, SAMPLE_REPLAY } from "../shared/sample.js";
 import type { AgentEvent, DealMemo, IntakeRequest } from "../shared/schema.js";
@@ -81,7 +82,73 @@ export function createApp() {
     }
   });
 
-  /** Interactive run from the MintIQ UI. Streams committee events, then saves and optionally emails. */
+  /**
+   * Per-stage endpoints. The browser orchestrates: five Tier 1 calls in parallel, then cases,
+   * then synthesis. Each call is its own function invocation, so no single request approaches
+   * Vercel's duration cap. Every endpoint streams the same SSE events and ends with `stage_output`.
+   */
+  const stageHandler = (fn: (body: any, emit: (e: AgentEvent) => void, usage: Usage, signal: AbortSignal, req: Request) => Promise<void>) =>
+    async (req: Request, res: Response) => {
+      if (!process.env.ANTHROPIC_API_KEY) { res.status(500).json({ error: "ANTHROPIC_API_KEY is not configured on the server." }); return; }
+      const { send, close } = sse(res);
+      const controller = new AbortController();
+      res.on("close", () => { if (!res.writableFinished) controller.abort(); });
+      const usage: Usage = { input_tokens: 0, output_tokens: 0, searches: 0 };
+      try {
+        await fn(req.body ?? {}, send, usage, controller.signal, req);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[stage]", message);
+        send({ type: "error", message });
+      } finally {
+        send({ type: "done" });
+        close();
+      }
+    };
+
+  app.post("/api/stage/research", stageHandler(async (body, emit, usage, signal) => {
+    const stage = body.stage as ResearchStage;
+    if (!RESEARCH_STAGES.includes(stage)) throw new Error(`Unknown research stage: ${stage}`);
+    const intake = body.intake as IntakeRequest;
+    if (!intake?.business_name) throw new Error("business_name is required");
+    const text = await runResearch(stage, { ...intake, files: [] }, emit, usage, signal);
+    emit({ type: "stage_output", stage, text, usage });
+  }));
+
+  app.post("/api/stage/financials", stageHandler(async (body, emit, usage, signal) => {
+    const intake = body.intake as IntakeRequest;
+    if (!intake?.business_name) throw new Error("business_name is required");
+    const text = await runFinancials(intake, emit, usage, signal);
+    emit({ type: "stage_output", stage: "financials", text, usage });
+  }));
+
+  app.post("/api/stage/cases", stageHandler(async (body, emit, usage, signal) => {
+    const intake = body.intake as IntakeRequest;
+    const outputs = body.outputs as StageOutputs;
+    if (!intake?.business_name || !outputs) throw new Error("intake and outputs are required");
+    const text = await runCases(buildResearchPack({ ...intake, files: [] }, outputs), emit, usage, signal);
+    emit({ type: "stage_output", stage: "cases", text, usage });
+  }));
+
+  app.post("/api/stage/synthesis", stageHandler(async (body, emit, usage, signal, req) => {
+    const intake = body.intake as IntakeRequest;
+    const outputs = body.outputs as StageOutputs;
+    const cases = body.cases as string;
+    if (!intake?.business_name || !outputs || !cases) throw new Error("intake, outputs, and cases are required");
+    const prior = (body.prior_usage ?? { input_tokens: 0, output_tokens: 0, searches: 0 }) as Usage;
+    const startedAt = Number(body.started_at) || Date.now();
+    const memo = await runSynthesis(buildResearchPack({ ...intake, files: [] }, outputs), cases, emit, usage, signal);
+    emit({ type: "memo", memo });
+    const stats: RunStats = { duration_ms: Date.now() - startedAt, input_tokens: prior.input_tokens + usage.input_tokens, output_tokens: prior.output_tokens + usage.output_tokens, searches: prior.searches + usage.searches };
+    emit({ type: "stats", ...stats });
+    const base = publicUrl(req);
+    const token = newToken();
+    await saveMemo({ token, business_name: memo.business.legal_name || intake.business_name, source: "ui", intake: { ...intake, files: [] }, memo, stats, delivered_to: null });
+    emit({ type: "saved", token, url: memoUrl(base, token) });
+    if (intake.notify_email) await deliver({ token, to: intake.notify_email, memo, intake, stats, source: "ui", base });
+  }));
+
+  /** Single-request run (local / self-hosted). Streams committee events, then saves and optionally emails. */
   app.post("/api/analyze", async (req: Request, res: Response) => {
     const intake = req.body as IntakeRequest;
     if (!intake || typeof intake.business_name !== "string" || !intake.business_name.trim()) {
@@ -94,7 +161,9 @@ export function createApp() {
     }
     const { send, close } = sse(res);
     const controller = new AbortController();
-    req.on("close", () => controller.abort());
+    // Abort only if the client goes away mid-run. (req "close" fires as soon as the body
+    // is consumed on modern Node, which would cancel the committee immediately.)
+    res.on("close", () => { if (!res.writableFinished) controller.abort(); });
     const base = publicUrl(req);
     try {
       let stats: RunStats | null = null;

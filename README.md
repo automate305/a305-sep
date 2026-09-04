@@ -213,6 +213,13 @@ secret that would otherwise gate it.
 
 ---
 
+## Design system
+
+The visual language for the dashboard and every future Automate305 surface is
+specified in [`docs/A305-DESIGN-SYSTEM-PRD.md`](docs/A305-DESIGN-SYSTEM-PRD.md):
+tokens, components, personas, screen templates, and the full status matrix.
+Start there before wireframing a new screen.
+
 ## Operator dashboard
 
 `/dashboard.html` is a lightweight command center for watching the engine —

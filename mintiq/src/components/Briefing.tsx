@@ -19,7 +19,7 @@ export function Briefing({ lines }: { lines: BriefingLine[] }) {
   const halt = () => { stop?.(); setPlaying(false); setCurrent(-1); };
 
   return (
-    <div className="card p-6 md:p-7 bg-navy-900 text-white border-navy-700">
+    <div className="rounded-xl border border-navy-700 p-6 md:p-7 text-white" style={{ background: "#0b1530" }}>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-full bg-gold-400/15 flex items-center justify-center"><Headphones className="w-5 h-5 text-gold-300" /></div>

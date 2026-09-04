@@ -2,12 +2,12 @@ import type { AgentEvent, DealMemo, IntakeRequest } from "../../shared/schema";
 
 export type OnEvent = (event: AgentEvent) => void;
 
-/** POST the intake and stream committee events back as they happen. */
-export async function analyze(intake: IntakeRequest, onEvent: OnEvent, signal: AbortSignal): Promise<void> {
-  const resp = await fetch("/api/analyze", {
+/** POST to an SSE endpoint and forward events as they arrive. */
+async function streamPost(url: string, body: unknown, onEvent: OnEvent, signal: AbortSignal): Promise<void> {
+  const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(intake),
+    body: JSON.stringify(body),
     signal,
   });
   if (!resp.ok || !resp.body) {
@@ -36,6 +36,45 @@ export async function analyze(intake: IntakeRequest, onEvent: OnEvent, signal: A
       }
     }
   }
+}
+
+/** Single-request run against /api/analyze (local and self-hosted servers). */
+export function analyze(intake: IntakeRequest, onEvent: OnEvent, signal: AbortSignal): Promise<void> {
+  return streamPost("/api/analyze", intake, onEvent, signal);
+}
+
+type StageUsage = { input_tokens: number; output_tokens: number; searches: number };
+
+async function stage(url: string, body: unknown, onEvent: OnEvent, signal: AbortSignal): Promise<{ text: string | null; usage: StageUsage }> {
+  let out: { text: string | null; usage: StageUsage } | null = null;
+  let failure: string | null = null;
+  await streamPost(url, body, (e) => {
+    if (e.type === "stage_output") out = { text: e.text, usage: e.usage };
+    else if (e.type === "error") failure = e.message;
+    else if (e.type !== "done") onEvent(e);
+  }, signal);
+  if (!out) throw new Error(failure ?? `${url} ended without output`);
+  return out;
+}
+
+/**
+ * Orchestrated run: five Tier 1 analysts in parallel, then the committee, then synthesis,
+ * each as its own short server request. Works everywhere and keeps every request well
+ * inside serverless time limits.
+ */
+export async function analyzeStaged(intake: IntakeRequest, onEvent: OnEvent, signal: AbortSignal): Promise<void> {
+  const started_at = Date.now();
+  onEvent({ type: "run_start", run_id: `run_${started_at.toString(36)}`, business_name: intake.business_name, model: "claude-opus-5" });
+  const lean = { ...intake, files: [] };
+  const [profile, reputation, records, industry, financials] = await Promise.all([
+    ...(["profile", "reputation", "records", "industry"] as const).map((s) => stage("/api/stage/research", { intake: lean, stage: s }, onEvent, signal)),
+    stage("/api/stage/financials", { intake }, onEvent, signal),
+  ]);
+  const outputs = { profile: profile.text ?? "", reputation: reputation.text ?? "", records: records.text ?? "", industry: industry.text ?? "", financials: financials.text };
+  const sum = (...u: StageUsage[]) => u.reduce((a, b) => ({ input_tokens: a.input_tokens + b.input_tokens, output_tokens: a.output_tokens + b.output_tokens, searches: a.searches + b.searches }), { input_tokens: 0, output_tokens: 0, searches: 0 });
+  const cases = await stage("/api/stage/cases", { intake: lean, outputs }, onEvent, signal);
+  const prior_usage = sum(profile.usage, reputation.usage, records.usage, industry.usage, financials.usage, cases.usage);
+  await streamPost("/api/stage/synthesis", { intake: lean, outputs, cases: cases.text, prior_usage, started_at }, onEvent, signal);
 }
 
 export interface SamplePayload {

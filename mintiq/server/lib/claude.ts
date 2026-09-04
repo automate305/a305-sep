@@ -66,6 +66,7 @@ export async function runStage(opts: RunStageOptions): Promise<string> {
 
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: opts.content }];
   let finalText = "";
+  let lastQuery = "";
 
   for (let turn = 0; turn < 8; turn++) {
     const stream = client().beta.messages.stream(
@@ -99,7 +100,8 @@ export async function runStage(opts: RunStageOptions): Promise<string> {
     stream.on("contentBlock", (block) => {
       if (block.type === "server_tool_use" && block.name === "web_search") {
         const q = (block.input as { query?: string })?.query;
-        if (q) {
+        if (q && q !== lastQuery) {
+          lastQuery = q;
           usage.searches += 1;
           emit({ type: "search", stage, query: q });
         }

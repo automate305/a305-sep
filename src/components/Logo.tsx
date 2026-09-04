@@ -86,3 +86,21 @@ function MarkInner() {
     </>
   );
 }
+
+/**
+ * MintIQ product wordmark: the MFG triangle mark plus "MintIQ" set in the serif,
+ * with "IQ" in the bright brand gold. `tone="light"` for navy backgrounds,
+ * `tone="dark"` for the cream memo surface.
+ */
+export function MintIQLogo({ tone = "light", height = 40, className = "" }: { tone?: "light" | "dark"; height?: number; className?: string }) {
+  const mint = tone === "light" ? "#f5f2ea" : "#0b1530";
+  const iq = tone === "light" ? "#ebb43b" : "#c9a84c";
+  return (
+    <span className={`inline-flex items-center gap-2.5 select-none ${className}`} style={{ height }} aria-label="MintIQ">
+      <MfgMark size={height * 0.98} />
+      <span className="font-serif font-semibold leading-none tracking-tight" style={{ fontSize: height * 0.78, color: mint }}>
+        Mint<span style={{ color: iq }}>IQ</span>
+      </span>
+    </span>
+  );
+}

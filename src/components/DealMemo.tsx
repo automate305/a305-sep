@@ -1,7 +1,8 @@
-import { ArrowLeft, Printer, RotateCcw, ExternalLink, AlertTriangle, AlertCircle, Info, CheckCircle2, Phone, ListChecks, Star, Building2, ShieldCheck, TrendingUp, FileSpreadsheet, Sparkles } from "lucide-react";
+import { ArrowLeft, Printer, RotateCcw, ExternalLink, Link2, Check, AlertTriangle, AlertCircle, Info, CheckCircle2, Phone, ListChecks, Star, Building2, ShieldCheck, TrendingUp, FileSpreadsheet, Sparkles } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, LineChart, Line } from "recharts";
 import type { DealMemo as Memo } from "../../shared/schema";
-import { MfgLogo } from "./Logo";
+import { MfgLogo, MintIQLogo } from "./Logo";
+import { useState } from "react";
 import { FitGauge } from "./FitGauge";
 import { Briefing } from "./Briefing";
 
@@ -33,8 +34,13 @@ function Section({ eyebrow, title, icon: Icon, children, className = "" }: { eye
 
 const tip = { contentStyle: { borderRadius: 8, border: `1px solid ${GRID}`, fontSize: 12, color: INK }, cursor: { fill: "rgba(201,168,76,0.12)" } };
 
-export function DealMemoView({ memo, stats, onBack, onReset, isSample }: { memo: Memo; stats: RunStats | null; onBack: () => void; onReset: () => void; isSample: boolean }) {
+export function DealMemoView({ memo, stats, onBack, onReset, isSample, shareUrl }: { memo: Memo; stats: RunStats | null; onBack: (() => void) | null; onReset: () => void; isSample: boolean; shareUrl?: string | null }) {
   const v = memo.verdict, b = memo.business, fs = memo.financial_snapshot;
+  const [copied, setCopied] = useState(false);
+  const copyLink = async () => {
+    if (!shareUrl) return;
+    try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { window.prompt("Copy this link", shareUrl); }
+  };
   const sevIcon = { high: AlertTriangle, medium: AlertCircle, low: Info } as const;
   const sevTone = { high: "text-red-700 bg-red-50 border-red-200", medium: "text-amber-800 bg-amber-50 border-amber-200", low: "text-navy-700 bg-cream-100 border-cream-200" } as const;
 
@@ -44,7 +50,7 @@ export function DealMemoView({ memo, stats, onBack, onReset, isSample }: { memo:
       <div className="sticky top-0 z-40 bg-cream-50/90 backdrop-blur border-b border-cream-200 print-hidden">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <MfgLogo tone="dark" height={40} />
+            <MintIQLogo tone="dark" height={34} />
             <div className="hidden md:block h-8 w-px bg-cream-200" />
             <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-[0.22em] text-gold-600">MintIQ deal memo{isSample ? " · sample (fictional)" : ""}</div>
@@ -52,7 +58,8 @@ export function DealMemoView({ memo, stats, onBack, onReset, isSample }: { memo:
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-cream-200 hover:bg-white"><ArrowLeft className="w-4 h-4" /> Timeline</button>
+            {onBack && <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-cream-200 hover:bg-white"><ArrowLeft className="w-4 h-4" /> Timeline</button>}
+            {shareUrl && <button onClick={copyLink} className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-cream-200 hover:bg-white">{copied ? <Check className="w-4 h-4 text-mint-600" /> : <Link2 className="w-4 h-4" />} {copied ? "Copied" : "Share"}</button>}
             <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-cream-200 hover:bg-white"><Printer className="w-4 h-4" /> PDF</button>
             <button onClick={onReset} className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-navy-900 text-white hover:bg-navy-800"><RotateCcw className="w-4 h-4" /> New</button>
           </div>

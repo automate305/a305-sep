@@ -127,6 +127,8 @@ export interface IntakeRequest {
   requested_amount?: string;
   use_of_funds?: string;
   notes?: string;
+  /** Optional: email the finished memo to this address. */
+  notify_email?: string;
   files?: IntakeFile[];
 }
 
@@ -152,6 +154,7 @@ export type AgentEvent =
   | { type: "thinking"; stage: StageId; text: string }
   | { type: "text"; stage: StageId; text: string }
   | { type: "memo"; memo: DealMemo }
+  | { type: "saved"; token: string; url: string }
   | { type: "stats"; duration_ms: number; input_tokens: number; output_tokens: number; searches: number }
   | { type: "error"; message: string; stage?: StageId }
   | { type: "done" };

@@ -70,3 +70,15 @@ export async function health(): Promise<{ ok: boolean; model: string; has_key: b
   const resp = await fetch("/api/health");
   return resp.json();
 }
+
+export interface MemoPayload { token: string; business_name: string; source: "ui" | "webhook" | "sample"; memo: DealMemo; stats: { duration_ms: number; input_tokens: number; output_tokens: number; searches: number } | null; created_at: string }
+
+export async function fetchMemo(token: string): Promise<MemoPayload> {
+  const resp = await fetch(`/api/memos/${encodeURIComponent(token)}`);
+  if (!resp.ok) {
+    let message = `Memo lookup failed (${resp.status}).`;
+    try { const j = await resp.json(); if (j?.error) message = j.error; } catch { /* ignore */ }
+    throw new Error(message);
+  }
+  return resp.json();
+}

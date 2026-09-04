@@ -25,7 +25,7 @@ function mediaTypeFor(file: File): string {
 }
 
 export function IntakeForm({ onRun, onSample, busy, hasKey }: { onRun: (intake: IntakeRequest) => void; onSample: () => void; busy: boolean; hasKey: boolean | null }) {
-  const [form, setForm] = useState<IntakeRequest>({ business_name: "", website: "", city: "", state: "FL", industry: "Specialty Trade Contractors", requested_amount: "", use_of_funds: "", notes: "" });
+  const [form, setForm] = useState<IntakeRequest>({ business_name: "", website: "", city: "", state: "FL", industry: "Specialty Trade Contractors", requested_amount: "", use_of_funds: "", notes: "", notify_email: "" });
   const [files, setFiles] = useState<File[]>([]);
   const [drag, setDrag] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export function IntakeForm({ onRun, onSample, busy, hasKey }: { onRun: (intake: 
     if (!form.business_name.trim()) { setErr("Enter the business name."); return; }
     setErr(null);
     const encoded: IntakeFile[] = await Promise.all(files.map(async (f) => ({ name: f.name, media_type: mediaTypeFor(f), data: await toBase64(f) })));
-    onRun({ ...form, business_name: form.business_name.trim(), files: encoded });
+    onRun({ ...form, business_name: form.business_name.trim(), notify_email: form.notify_email?.trim() || undefined, files: encoded });
   };
 
   const field = "w-full bg-navy-900/60 border border-gold-500/20 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/20 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder:text-navy-300/70 outline-none transition";
@@ -120,6 +120,10 @@ export function IntakeForm({ onRun, onSample, busy, hasKey }: { onRun: (intake: 
           <div className="md:col-span-2">
             <div className={label}>Advisor notes</div>
             <textarea className={`${field} min-h-[64px] resize-y`} value={form.notes} onChange={set("notes")} placeholder="Referral source, what the bank said, anything the owner mentioned" />
+          </div>
+          <div className="md:col-span-2">
+            <div className={label}>Email the memo to <span className="text-navy-300/70 normal-case tracking-normal">(optional)</span></div>
+            <input type="email" className={field} value={form.notify_email} onChange={set("notify_email")} placeholder="felipe@mintfinancialgroup.com" />
           </div>
 
           <div className="md:col-span-2">

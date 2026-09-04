@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Mint Financial Group palette (logo navy + gold; site emerald for positive signals) */
+  --color-navy-950: #060c1f;
+  --color-navy-900: #0b1530;
+  --color-navy-800: #12204a;
+  --color-navy-700: #1b2d63;
+  --color-navy-600: #26397a;
+  --color-navy-300: #8b97c2;
+  --color-gold-200: #f1e3b5;
+  --color-gold-300: #e2c981;
+  --color-gold-400: #ebb43b;
+  --color-gold-500: #c9a84c;
+  --color-gold-600: #a88656;
+  --color-gold-700: #8a6d46;
+  --color-mint-500: #10b981;
+  --color-mint-600: #059669;
+  --color-cream-50: #fbfaf7;
+  --color-cream-100: #f5f2ea;
+  --color-cream-200: #e9e4d6;
+  --color-silver-400: #b8bcc8;
+}
+
+@layer base {
+  html, body, #root { height: 100%; margin: 0; }
+  body { background: var(--color-navy-950); color: #fff; font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+  ::selection { background: rgba(235, 180, 59, 0.35); }
+}
+
+@layer utilities {
+  .text-gold-gradient {
+    background: linear-gradient(100deg, #f1e3b5 0%, #ebb43b 40%, #c9a84c 70%, #a88656 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .bg-gold-gradient { background: linear-gradient(100deg, #ebb43b, #c9a84c 60%, #a88656); }
+  .glow-gold { box-shadow: 0 0 0 1px rgba(201,168,76,.35), 0 12px 40px -12px rgba(235,180,59,.45); }
+  .glass { background: rgba(11, 21, 48, 0.55); backdrop-filter: blur(14px); border: 1px solid rgba(201, 168, 76, 0.18); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+  .thin-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .thin-scrollbar::-webkit-scrollbar-thumb { background: rgba(201,168,76,.35); border-radius: 3px; }
+  .card { background: #fff; border: 1px solid var(--color-cream-200); border-radius: 12px; }
+}
+
+@keyframes shimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(235,180,59,0.18) 50%, rgba(255,255,255,0.05) 100%);
+  background-size: 800px 100%; animation: shimmer 2.2s linear infinite;
+}
+@keyframes pulse-ring { 0% { transform: scale(.85); opacity: .8 } 100% { transform: scale(1.6); opacity: 0 } }
+.pulse-ring::after { content: ""; position: absolute; inset: 0; border-radius: 9999px; border: 2px solid #ebb43b; animation: pulse-ring 1.4s ease-out infinite; }
+
+@media print {
+  body { background: #fff !important; color: #111 !important; }
+  .print-hidden { display: none !important; }
+  .memo-root { overflow: visible !important; height: auto !important; }
+  .card { break-inside: avoid; box-shadow: none !important; }
+  @page { margin: 14mm; }
+}

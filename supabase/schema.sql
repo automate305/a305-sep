@@ -1,4 +1,20 @@
 -- ============================================================
+-- ⚠  THIS IS NOT THE PRODUCTION SCHEMA. DO NOT APPLY IT.
+--
+-- Production runs the 8-table schema recorded in schema.production.sql,
+-- measured from the live database on 9 Sep 2026. This file describes a
+-- 19-table multi-brand design that has never been applied, and the migration
+-- to it has been ruled out for now. See RECOVERY.md.
+--
+-- Applying this file would also be a SECURITY REGRESSION: it creates
+-- `for all using (true)` RLS policies, whereas production runs RLS enabled
+-- with zero policies — denying everything except the service role.
+--
+-- Kept for reference. lib/dns-gate.js and lib/warmup.js alongside it are
+-- genuinely good and are scheduled to be lifted in later phases.
+-- ============================================================
+
+-- ============================================================
 -- Automate305 SEP · Supabase Schema  (multi-brand rewrite)
 --
 -- One engine, two sending brands:

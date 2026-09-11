@@ -2,20 +2,43 @@
   "name": "a305-sep",
   "version": "1.0.0",
   "description": "Automate305 Sales Engagement Platform — Supabase + Hostinger SMTP + Vercel",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "type": "module",
   "scripts": {
-    "trigger":  "node scripts/daily-trigger.js",
-    "enroll":   "node scripts/enroll-contacts.js",
-    "test":     "node --test tests/gate-logic.test.js",
-    "dev":      "vercel dev"
+    "build": "next build --webpack",
+    "dev": "next dev",
+    "enroll": "node scripts/enroll-contacts.js",
+    "lint": "eslint .",
+    "start": "next start",
+    "test": "node --test tests/*.test.mjs",
+    "trigger": "node scripts/daily-trigger.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.43.0",
-    "imap":                  "^0.8.19",
-    "mailparser":            "^3.7.1",
-    "nodemailer":            "^6.9.13"
+    "@supabase/supabase-js": "2.102.0",
+    "next": "16.2.6",
+    "nodemailer": "6.9.13",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
-    "vercel": "^34.0.0"
+    "@eslint/js": "9.39.4",
+    "@next/eslint-plugin-next": "16.2.6",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.4",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "16.4.0",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.59.3",
+    "vercel": "^59.11.0"
   }
 }

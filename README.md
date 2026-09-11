@@ -1,13 +1,13 @@
 # Automate305 SEP
 **Simple Sales Engagement Platform**
-Supabase (state) + Hostinger SMTP (sending) + Vercel (webhook) + Cowork (trigger)
+Supabase (state) + provider-routed SMTP (sending) + Vercel (webhook) + Cowork (trigger)
 
 Runs **multiple campaigns from one engine**, each with its own senders and copy:
 
 | Campaign | Sequences | Sends from | Copy |
 |----------|-----------|------------|------|
-| `aesthetic` | `dp4`, `clearview` | `aestheticdevicepro.com` (matt@ / tamiko@ + aliases) | Device outreach |
-| `hvac` | `hvac_a`, `hvac_b` | `automate305.com` (cam@ + warmup slots) | Automate305 HVAC / South Florida (ColdIQ copy) |
+| `aesthetic` | `dp4`, `clearview` | Hostinger · `aestheticdevicepro.com` (matt@ / tamiko@) | Device outreach |
+| `hvac` | `hvac_a`, `hvac_b` | Google Workspace · `automate305.com` (cam@) | Automate305 HVAC / South Florida (ColdIQ copy) |
 
 Each sequence is tagged with a `campaign`, and the sender for every email is
 picked from the **same campaign** — so HVAC mail never goes out from the
@@ -30,11 +30,32 @@ aesthetic mailboxes, and vice versa.
 ### Step 3 — Local setup (Cowork trigger)
 ```bash
 npm install
-cp .env.example .env
-# Fill in your .env values
+cp .env.example .env.local
+# Fill in your local values; never commit .env.local
+npm run dev
 ```
 
-### Step 4 — Enroll your first contacts
+Open `http://localhost:3000` for the server-rendered outreach dashboard. It
+reads the existing Supabase views and tables on the server; the service-role
+key is never included in client code. `DASHBOARD_ACCESS_KEY` protects contact
+data and the approval controls with an HttpOnly, same-site session cookie.
+Approve/skip actions execute as authenticated Server Actions and never expose
+the webhook secret or Supabase key to the browser.
+
+### Step 4 — Build a sequence and enroll contacts
+
+Unlock the dashboard and use **Sequences** to create or edit cadence and copy.
+Then use **Contacts** to upload or paste a CSV, choose the sequence, and enroll
+the batch. Imports validate email addresses, de-duplicate the batch, preserve
+existing contacts, honor bounced/unsubscribed suppression, and place every new
+first touch in the hold queue. Importing never sends email.
+
+Required CSV column: `email`. Supported optional columns include `first_name`,
+`last_name`, `company`, `practice_name`, `title`, `phone`, `city`, `state`,
+`linkedin_url`, `source`, and the personalization fields documented below.
+
+The command-line flow remains available for automation:
+
 ```bash
 # Aesthetic campaign — getleads export
 node scripts/enroll-contacts.js --sequence dp4 --file contacts.json
@@ -100,13 +121,15 @@ commands to run next.
 ```
 Morning → node scripts/daily-trigger.js
           ↓
+          Verifies active SMTP accounts (no email sent)
+          ↓
           Resets sender counts
           ↓
           Calls Vercel /api/send
           ↓
-          Pulls today's queue from Supabase
+          Pulls approved items from today's queue in Supabase
           ↓
-          Sends via Hostinger SMTP (campaign-matched sender)
+          Sends via campaign-matched SMTP (Google or Hostinger)
           ↓
           Updates enrollment step + next_send_date
           ↓
@@ -114,14 +137,18 @@ Morning → node scripts/daily-trigger.js
 ```
 
 The trigger processes **every** active campaign in one run; each email draws a
-sender from its own campaign pool.
+sender from its own campaign pool. A sender must be active, marked `warmed`,
+have remaining daily capacity, and have a usable `SMTP_PASS_*` credential.
+New enrollments default to `held` for first-touch approval. Approving an item in
+the dashboard moves it into the next protected send run; skipping pauses it.
 
 ---
 
-## Sender warmup schedule
+## Sender warmup and campaign ramp
 
-Update `daily_limit` in the Supabase `senders` table as you warm up. Warm each
-domain independently:
+Warm each new real mailbox for 2–3 weeks with campaign sending disabled. Once
+mailbox health is stable, set `warmed=true`, set `active=true`, and use this
+conservative campaign ramp:
 
 | Days | limit per active mailbox | Notes |
 |------|--------------------------|-------|
@@ -130,23 +157,28 @@ domain independently:
 | 8–14 | 15  | |
 | 15+  | 25  | Full send |
 
-- **Aesthetic** (`aestheticdevicepro.com`): matt@ and tamiko@ start active at 5.
-  Activate an alias (don@, jen@, …) by raising its `daily_limit` above 0.
-- **HVAC** (`automate305.com`): cam@ starts active at 5. camilo@ / hello@ / sales@
-  are warmup slots — create the real Hostinger mailbox, add its `SMTP_PASS_*`
-  env var, then set `active=true` and raise `daily_limit`.
+- **Aesthetic / Hostinger** (`aestheticdevicepro.com`): matt@ and tamiko@ are
+  the two real mailboxes. They start inactive and blocked from campaign sends
+  until warmup is complete. Aliases remain inactive because they are not
+  independent mailbox capacity.
+- **HVAC / Google Workspace** (`automate305.com`): cam@ is the confirmed warmed
+  sender and starts at 5/day. `SMTP_PASS_CAM` must contain a Google App Password.
+  camilo@ / hello@ / sales@ stay inactive unless they become real mailboxes and
+  complete their own warmup.
 
 ### Deliverability before you scale
 - Set up **SPF, DKIM, and DMARC** on both sending domains before raising limits.
+- Run the protected `/api/readiness` check before enabling campaign sends. It
+  authenticates each active positive-limit mailbox without sending a message.
 - Every send includes a one-click `List-Unsubscribe` header (RFC 8058) plus a
   plain-text unsubscribe line, and honors replies routed to the main inbox.
-- Keep the 3s inter-send throttle (in `api/send.js`) to stay under SMTP limits.
+- Keep the 3s inter-send throttle (in `pages/api/send.js`) to stay under SMTP limits.
 
 ---
 
 ## Managing replies / bounces
 
-When you see a reply or bounce in Hostinger inbox:
+When you see a reply or bounce in the Google Workspace or Hostinger inbox:
 
 ```bash
 # Someone replied — stop sequence
@@ -202,9 +234,20 @@ marks the enrollment `completed` when no further step exists.
 | `/api/send` | POST | Process today's queue |
 | `/api/enroll` | POST | Add contacts to a sequence |
 | `/api/update-status` | POST | Mark replied/bounced/unsubscribed |
-| `/api/health` | GET | Config/health check (which env vars are set) |
+| `/api/health` | GET | Public placeholder-aware config check |
+| `/api/readiness` | GET | Protected, no-send SMTP authentication check |
 
-The POST endpoints require the `x-a305-secret` header. `/api/health` is
-unauthenticated by design — it reports only which env vars are *set*
-(booleans, never values), so it's useful for debugging the very secret that
-would otherwise gate it.
+The handlers live under `pages/api/` so their public URLs and request/response
+contracts remain unchanged alongside the App Router dashboard.
+
+The mutation endpoints and `/api/readiness` require the `x-a305-secret` header.
+`/api/health` is unauthenticated by design and reports booleans only. Values
+copied unchanged from `.env.example` are treated as unconfigured.
+
+Run the readiness check only from a trusted terminal. It opens SMTP connections
+and authenticates, but it does not send email:
+
+```bash
+curl https://a305-sep.vercel.app/api/readiness \
+  -H "x-a305-secret: $WEBHOOK_SECRET"
+```

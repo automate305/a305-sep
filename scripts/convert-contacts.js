@@ -206,7 +206,8 @@ function main() {
   const buckets = { hvac_a: [], hvac_b: [] }
   for (const c of contacts) {
     const seq = c._seq
-    const { _seq, ...clean } = c
+    const clean = { ...c }
+    delete clean._seq
     // strip undefined keys for tidy JSON
     Object.keys(clean).forEach(k => clean[k] === undefined && delete clean[k])
     buckets[seq].push(clean)

@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { contacts, sequence, start_date } = req.body
+  const { contacts, sequence, start_date, approval_required = true } = req.body
 
   if (!contacts?.length || !sequence) {
     return res.status(400).json({ error: 'contacts[] and sequence are required' })
@@ -87,7 +87,9 @@ export default async function handler(req, res) {
 
       if (cErr) throw cErr
 
-      // Enroll (skip if already enrolled in this sequence)
+      // First touches default to approval mode. The dashboard can approve or
+      // skip them without exposing the webhook or Supabase service secrets.
+      const requiresApproval = approval_required !== false
       const { error: eErr } = await supabase
         .from('enrollments')
         .insert({
@@ -95,7 +97,9 @@ export default async function handler(req, res) {
           sequence_id:    seq.id,
           current_step:   1,
           next_send_date: sendDate,
-          status:         'active'
+          status:         requiresApproval ? 'held' : 'active',
+          hold_reason:    requiresApproval ? 'First-touch approval required' : null,
+          held_at:        requiresApproval ? new Date().toISOString() : null
         })
 
       if (eErr?.code === '23505') {

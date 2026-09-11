@@ -9,6 +9,11 @@ node_modules/
 # Vercel
 .vercel
 
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
 # Contact data (never commit lead lists)
 contacts.json
 *.contacts.json
@@ -19,3 +24,4 @@ npm-debug.log*
 
 # OS
 .DS_Store
+.env*

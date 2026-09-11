@@ -1,7 +1,8 @@
 // ============================================================
 // Automate305 SEP · /api/send.js
 // Vercel serverless function — receives daily trigger,
-// pulls today's queue from Supabase, sends via Hostinger SMTP.
+// pulls today's queue from Supabase, then routes SMTP by sender domain:
+// Google Workspace for automate305.com and Hostinger for aestheticdevicepro.com.
 //
 // Multi-campaign: each queue item carries its sequence's campaign
 // ('aesthetic' | 'hvac') and a sender is picked from the SAME campaign,
@@ -9,7 +10,11 @@
 // ============================================================
 
 import { createClient } from '@supabase/supabase-js'
-import nodemailer from 'nodemailer'
+
+import {
+  createSmtpTransporter,
+  senderIsEligible
+} from '../../lib/services/smtp.js'
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -18,30 +23,14 @@ const supabase = createClient(
 
 const MAX_STEP_FALLBACK = 10   // safety bound if a template lookup ever fails
 
-// ── HOSTINGER SMTP CONFIG ────────────────────────────────────
-// One transporter per sender (Hostinger requires auth per mailbox)
-function makeTransporter(sender) {
-  return nodemailer.createTransport({
-    host:   sender.host || 'smtp.hostinger.com',
-    port:   sender.port || 465,
-    secure: (sender.port || 465) === 465,   // 465 = implicit SSL
-    auth: {
-      user: sender.email,
-      pass: process.env[passEnvVar(sender.email)]
-      // Env var naming: matt@ → SMTP_PASS_MATT, cam@ → SMTP_PASS_CAM, etc.
-    }
-  })
-}
-
-function passEnvVar(email) {
-  return `SMTP_PASS_${email.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '_')}`
-}
-
 // ── TEMPLATE MERGE ───────────────────────────────────────────
 // Supports both the aesthetic variables (practice_name, sender_name) and
 // the HVAC/ColdIQ variables (company, signature, personalized_line, etc.).
 function mergeTemplate(text, contact, sender) {
   const area = contact.area || contact.city || 'South Florida'
+  const fallbackPersonalizedParagraph = contact.campaign === 'aesthetic'
+    ? `I came across ${contact.practice_name || 'your practice'} while reviewing local aesthetics teams.`
+    : 'I came across your company while looking at HVAC shops in the area.'
   return (text || '')
     .replace(/{{first_name}}/g,             contact.first_name    || 'there')
     .replace(/{{last_name}}/g,              contact.last_name     || '')
@@ -53,7 +42,7 @@ function mergeTemplate(text, contact, sender) {
              'I came across your company while looking at HVAC shops in the area.')
     .replace(/{{personalized_paragraph}}/g, contact.personalized_paragraph ||
              contact.personalized_line ||
-             'I came across your company while looking at HVAC shops in the area.')
+             fallbackPersonalizedParagraph)
     .replace(/{{pain_point}}/g,             contact.pain_point || 'scheduling and dispatch')
     .replace(/{{area}}/g,                   area)
     .replace(/{{website_observation}}/g,    contact.website_observation ||
@@ -66,19 +55,22 @@ async function pickSender(campaign) {
     .from('senders')
     .select('*')
     .eq('active', true)
+    .eq('warmed', true)
     .order('sends_today', { ascending: true })
-    .limit(1)
 
   if (campaign) query = query.eq('campaign', campaign)
 
   const { data, error } = await query
-  const sender = data && data[0]
 
   if (error) throw new Error(`Sender lookup failed: ${error.message}`)
-  if (!sender) throw new Error(`No active senders for campaign "${campaign}"`)
-  if (sender.sends_today >= sender.daily_limit) {
-    throw new Error(`Daily limit reached for campaign "${campaign}" (all senders maxed)`)
+  const sender = data?.find((candidateSender) => senderIsEligible(candidateSender))
+
+  if (!sender) {
+    throw new Error(
+      `No warmed, credentialed sender with remaining capacity for campaign "${campaign}"`
+    )
   }
+
   return sender
 }
 
@@ -130,6 +122,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  const requestedCampaign = typeof req.query.campaign === 'string' ? req.query.campaign.trim() : ''
+  if (requestedCampaign && !/^[a-z0-9_]+$/.test(requestedCampaign)) {
+    return res.status(400).json({ error: 'Invalid campaign filter' })
+  }
+
   const results = { sent: [], failed: [], skipped: [] }
 
   try {
@@ -139,22 +136,43 @@ export default async function handler(req, res) {
       .select('*')
 
     if (qErr) throw qErr
-    if (!queue || queue.length === 0) {
+    const campaignQueue = requestedCampaign
+      ? (queue || []).filter((item) => item.campaign === requestedCampaign)
+      : queue || []
+    if (campaignQueue.length === 0) {
       return res.status(200).json({ message: 'Nothing in queue today', results })
     }
 
-    console.log(`📬 Queue: ${queue.length} emails to process`)
+    console.log(`📬 Queue: ${campaignQueue.length} emails to process`)
 
     // 2. Process each enrollment
-    for (const item of queue) {
+    for (const item of campaignQueue) {
 
       try {
         // Pick a sender with capacity, scoped to this item's campaign
         const sender = await pickSender(item.campaign)
 
         // Merge template
-        const subject = mergeTemplate(item.subject,   item, sender)
-        const body    = mergeTemplate(item.body_text, item, sender)
+        const subject = mergeTemplate(item.subject, item, sender).toLowerCase()
+        const body = mergeTemplate(item.body_text, item, sender)
+
+        // Fail closed before SMTP if a template contains an unknown merge field.
+        const subjectWordCount = subject.split(/\s+/).filter(Boolean).length
+        if (/{{[^}]+}}/.test(subject) || /{{[^}]+}}/.test(body) || body.includes('—') || subjectWordCount < 3 || subjectWordCount > 4) {
+          await supabase
+            .from('enrollments')
+            .update({
+              status: 'held',
+              hold_reason: 'Template failed copy safeguards',
+              held_at: new Date().toISOString()
+            })
+            .eq('id', item.enrollment_id)
+          results.skipped.push({
+            email: item.email,
+            reason: 'Template failed copy safeguards'
+          })
+          continue
+        }
 
         // Replies route to the sender's configured inbox (aliases → main box)
         const replyTo = sender.reply_to || sender.email
@@ -165,8 +183,8 @@ export default async function handler(req, res) {
           `\n\n---\nDon't want to hear from me? Reply "unsubscribe" and I'll ` +
           `take you off the list.`
 
-        // Send via Hostinger SMTP
-        const transporter = makeTransporter(sender)
+        // Route Automate305 through Google Workspace and Aesthetic through Hostinger.
+        const transporter = createSmtpTransporter(sender)
         await transporter.sendMail({
           from:    `"${sender.name}" <${sender.email}>`,
           to:      item.email,

@@ -32,38 +32,59 @@ create table if not exists senders (
 -- Columns added after the original scaffold (no-op on a fresh create)
 alter table senders add column if not exists signature text;
 alter table senders add column if not exists reply_to  text;
+alter table senders add column if not exists warmup_started_at       timestamptz;
+alter table senders add column if not exists health_score            int;
+alter table senders add column if not exists inbox_placement_score  int;
+alter table senders add column if not exists bounce_score            int;
+alter table senders add column if not exists complaint_score         int;
+alter table senders add column if not exists postmaster_score        int;
+alter table senders add column if not exists reply_score             int;
 
--- Seed: aesthetic senders (aestheticdevicepro.com) — matt@ and tamiko@ groups.
--- Aliases start inactive (daily_limit 0); replies route to the main inbox.
-insert into senders (email, name, campaign, signature, reply_to, daily_limit) values
-  ('matt@aestheticdevicepro.com',    'Matt',    'aesthetic', 'Matt',    'matt@aestheticdevicepro.com',   5),
-  ('don@aestheticdevicepro.com',     'Don',     'aesthetic', 'Don',     'matt@aestheticdevicepro.com',   0),
-  ('ed@aestheticdevicepro.com',      'Ed',      'aesthetic', 'Ed',      'matt@aestheticdevicepro.com',   0),
-  ('eddie@aestheticdevicepro.com',   'Eddie',   'aesthetic', 'Eddie',   'matt@aestheticdevicepro.com',   0),
-  ('matthew@aestheticdevicepro.com', 'Matthew', 'aesthetic', 'Matthew', 'matt@aestheticdevicepro.com',   0),
-  ('rob@aestheticdevicepro.com',     'Rob',     'aesthetic', 'Rob',     'matt@aestheticdevicepro.com',   0),
-  ('tamiko@aestheticdevicepro.com',  'Tamiko',  'aesthetic', 'Tamiko',  'tamiko@aestheticdevicepro.com', 5),
-  ('jen@aestheticdevicepro.com',     'Jen',     'aesthetic', 'Jen',     'tamiko@aestheticdevicepro.com', 0),
-  ('jenny@aestheticdevicepro.com',   'Jenny',   'aesthetic', 'Jenny',   'tamiko@aestheticdevicepro.com', 0),
-  ('jess@aestheticdevicepro.com',    'Jess',    'aesthetic', 'Jess',    'tamiko@aestheticdevicepro.com', 0),
-  ('jessica@aestheticdevicepro.com', 'Jessica', 'aesthetic', 'Jessica', 'tamiko@aestheticdevicepro.com', 0),
-  ('tami@aestheticdevicepro.com',    'Tami',    'aesthetic', 'Tami',    'tamiko@aestheticdevicepro.com', 0)
+-- The two real mailboxes start inactive until warmup is complete. Aliases remain
+-- inactive because they are not independent warmup capacity.
+insert into senders (email, name, campaign, signature, reply_to, daily_limit, host, port, warmed, active) values
+  ('matt@aestheticdevicepro.com',    'Matt',    'aesthetic', 'Matt',    'matt@aestheticdevicepro.com',   5, 'smtp.hostinger.com', 465, false, false),
+  ('don@aestheticdevicepro.com',     'Don',     'aesthetic', 'Don',     'matt@aestheticdevicepro.com',   0, 'smtp.hostinger.com', 465, false, false),
+  ('ed@aestheticdevicepro.com',      'Ed',      'aesthetic', 'Ed',      'matt@aestheticdevicepro.com',   0, 'smtp.hostinger.com', 465, false, false),
+  ('eddie@aestheticdevicepro.com',   'Eddie',   'aesthetic', 'Eddie',   'matt@aestheticdevicepro.com',   0, 'smtp.hostinger.com', 465, false, false),
+  ('matthew@aestheticdevicepro.com', 'Matthew', 'aesthetic', 'Matthew', 'matt@aestheticdevicepro.com',   0, 'smtp.hostinger.com', 465, false, false),
+  ('rob@aestheticdevicepro.com',     'Rob',     'aesthetic', 'Rob',     'matt@aestheticdevicepro.com',   0, 'smtp.hostinger.com', 465, false, false),
+  ('tamiko@aestheticdevicepro.com',  'Tamiko',  'aesthetic', 'Tamiko',  'tamiko@aestheticdevicepro.com', 5, 'smtp.hostinger.com', 465, false, false),
+  ('jen@aestheticdevicepro.com',     'Jen',     'aesthetic', 'Jen',     'tamiko@aestheticdevicepro.com', 0, 'smtp.hostinger.com', 465, false, false),
+  ('jenny@aestheticdevicepro.com',   'Jenny',   'aesthetic', 'Jenny',   'tamiko@aestheticdevicepro.com', 0, 'smtp.hostinger.com', 465, false, false),
+  ('jess@aestheticdevicepro.com',    'Jess',    'aesthetic', 'Jess',    'tamiko@aestheticdevicepro.com', 0, 'smtp.hostinger.com', 465, false, false),
+  ('jessica@aestheticdevicepro.com', 'Jessica', 'aesthetic', 'Jessica', 'tamiko@aestheticdevicepro.com', 0, 'smtp.hostinger.com', 465, false, false),
+  ('tami@aestheticdevicepro.com',    'Tami',    'aesthetic', 'Tami',    'tamiko@aestheticdevicepro.com', 0, 'smtp.hostinger.com', 465, false, false)
 on conflict (email) do nothing;
 
--- Seed: HVAC senders (automate305.com). cam@ is the live sender; the rest are
--- warmup slots — create the real Hostinger mailbox, warm it, then flip
--- active=true and raise daily_limit. Replies route to cam@.
-insert into senders (email, name, campaign, signature, reply_to, daily_limit, active) values
-  ('cam@automate305.com',    'Camilo', 'hvac', 'Camilo | Automate305', 'cam@automate305.com', 5, true),
-  ('camilo@automate305.com', 'Camilo', 'hvac', 'Camilo | Automate305', 'cam@automate305.com', 0, false),
-  ('hello@automate305.com',  'Camilo', 'hvac', 'Camilo | Automate305', 'cam@automate305.com', 0, false),
-  ('sales@automate305.com',  'Camilo', 'hvac', 'Camilo | Automate305', 'cam@automate305.com', 0, false)
+-- Seed: HVAC senders (automate305.com). cam@ is the confirmed warmed Google
+-- Workspace sender; the remaining addresses stay inactive until they become
+-- real, independently warmed mailboxes. Replies route to cam@.
+insert into senders (email, name, campaign, signature, reply_to, daily_limit, active, host, port, warmed) values
+  ('cam@automate305.com',    'Camilo', 'hvac', 'Camilo | Automate305', 'cam@automate305.com', 5, true,  'smtp.gmail.com', 465, true),
+  ('camilo@automate305.com', 'Camilo', 'hvac', 'Camilo | Automate305', 'cam@automate305.com', 0, false, 'smtp.gmail.com', 465, false),
+  ('hello@automate305.com',  'Camilo', 'hvac', 'Camilo | Automate305', 'cam@automate305.com', 0, false, 'smtp.gmail.com', 465, false),
+  ('sales@automate305.com',  'Camilo', 'hvac', 'Camilo | Automate305', 'cam@automate305.com', 0, false, 'smtp.gmail.com', 465, false)
 on conflict (email) do nothing;
+
+-- Align existing installations without changing a mailbox already marked warmed.
+update senders
+set host = 'smtp.gmail.com', port = 465, warmed = true, active = true
+where email = 'cam@automate305.com';
+
+update senders
+set host = 'smtp.hostinger.com', port = 465
+where campaign = 'aesthetic';
+
+update senders
+set active = false
+where campaign = 'aesthetic'
+  and warmed = false;
 
 -- ── SEQUENCES ────────────────────────────────────────────────
 create table if not exists sequences (
   id          uuid primary key default gen_random_uuid(),
-  name        text not null unique,   -- 'dp4' | 'clearview' | 'hvac_a' | 'hvac_b'
+  name        text not null unique,   -- 'dp4' | 'dp4_b' | 'clearview' | 'clearview_b' | 'hvac_a' | 'hvac_b'
   campaign    text not null default 'general',  -- routes to senders.campaign
   description text,
   active      boolean not null default true,
@@ -74,7 +95,9 @@ alter table sequences add column if not exists campaign text not null default 'g
 
 insert into sequences (name, campaign, description) values
   ('dp4',       'aesthetic', 'DP4 Microneedling device outreach · 3-step · aesthetics practices'),
+  ('dp4_b',     'aesthetic', 'DP4 B · 3-step · treatment-menu angle · aesthetics practices'),
   ('clearview', 'aesthetic', 'ClearVIEW device outreach · 3-step · aesthetics practices'),
+  ('clearview_b', 'aesthetic', 'ClearVIEW B · 3-step · consult-flow angle · aesthetics practices'),
   ('hvac_a',    'hvac',      'HVAC Sequence A · 4-step · offer-led (free website carrot) · weak/no website'),
   ('hvac_b',    'hvac',      'HVAC Sequence B · 4-step · ROI/operator angle · established presence')
 on conflict (name) do update set campaign = excluded.campaign;
@@ -376,11 +399,23 @@ create table if not exists enrollments (
   current_step    int  not null default 1,
   next_send_date  date not null default current_date,
   status          text not null default 'active',
-  -- 'active' | 'completed' | 'replied' | 'unsubscribed' | 'bounced' | 'paused'
+  -- 'active' | 'held' | 'completed' | 'replied' | 'unsubscribed' | 'bounced' | 'paused'
+  hold_reason     text,
+  held_at         timestamptz,
+  reviewed_at     timestamptz,
+  reviewed_by     text,
   enrolled_at     timestamptz default now(),
   completed_at    timestamptz,
   unique (contact_id, sequence_id)
 );
+
+alter table enrollments add column if not exists hold_reason text;
+alter table enrollments add column if not exists held_at timestamptz;
+alter table enrollments add column if not exists reviewed_at timestamptz;
+alter table enrollments add column if not exists reviewed_by text;
+
+create index if not exists enrollments_sequence_id_idx
+  on enrollments (sequence_id);
 
 -- ── SEND LOG ─────────────────────────────────────────────────
 create table if not exists send_log (
@@ -397,18 +432,44 @@ create table if not exists send_log (
   error_message text
 );
 
+create index if not exists send_log_enrollment_id_idx
+  on send_log (enrollment_id);
+create index if not exists send_log_contact_id_idx
+  on send_log (contact_id);
+create index if not exists send_log_sender_id_idx
+  on send_log (sender_id);
+create index if not exists send_log_template_id_idx
+  on send_log (template_id);
+
+-- ── AI USAGE LEDGER ─────────────────────────────────────────
+-- Every server-side AI call can append one row. No current workflow writes
+-- demo spend; the dashboard shows $0 until actual usage is recorded.
+create table if not exists ai_usage (
+  id            uuid primary key default gen_random_uuid(),
+  provider      text not null,
+  model         text not null,
+  feature       text not null,
+  input_tokens  int not null default 0,
+  output_tokens int not null default 0,
+  cost_usd      numeric(12, 6) not null default 0,
+  created_at    timestamptz not null default now()
+);
+
 -- ── DAILY RESET FUNCTION ─────────────────────────────────────
 -- Call this via a Supabase cron job or your webhook at midnight
 create or replace function reset_daily_sends()
-returns void language sql as $$
-  update senders set sends_today = 0;
+returns void
+language sql
+set search_path = ''
+as $$
+  update public.senders set sends_today = 0;
 $$;
 
 -- ── USEFUL VIEWS ─────────────────────────────────────────────
 
 -- What needs to go out today. New columns are appended at the end so this
 -- view can be replaced in place on an existing project.
-create or replace view todays_queue as
+create or replace view todays_queue with (security_invoker = true) as
 select
   e.id           as enrollment_id,
   c.email,
@@ -431,7 +492,8 @@ select
   c.pain_point,
   c.area,
   c.city,
-  c.website_observation
+  c.website_observation,
+  e.next_send_date
 from enrollments e
 join contacts    c   on c.id  = e.contact_id
 join sequences   seq on seq.id = e.sequence_id
@@ -443,15 +505,17 @@ where e.status         = 'active'
 order by e.next_send_date asc;
 
 -- Sender availability today (send.js additionally filters by campaign)
-create or replace view available_senders as
+create or replace view available_senders with (security_invoker = true) as
 select *
 from senders
 where active = true
+  and warmed = true
+  and daily_limit > 0
   and sends_today < daily_limit
 order by sends_today asc;
 
 -- Pipeline summary
-create or replace view pipeline_summary as
+create or replace view pipeline_summary with (security_invoker = true) as
 select
   seq.name                                          as sequence,
   count(*) filter (where e.status = 'active')       as active,
@@ -472,21 +536,28 @@ alter table enrollments enable row level security;
 alter table send_log    enable row level security;
 alter table templates   enable row level security;
 alter table sequences   enable row level security;
+alter table ai_usage    enable row level security;
 
--- Service role bypasses RLS entirely (your webhook uses the service role
--- key). These permissive policies exist so the anon/authenticated roles
--- behave predictably if you ever query with them; tighten as needed.
--- `drop ... if exists` first so this block is safe to re-run.
+-- Service-role requests bypass RLS. Browser roles receive no table grants or
+-- permissive policies, so operational data and contact PII stay server-only.
 drop policy if exists "service_role_all" on senders;
 drop policy if exists "service_role_all" on contacts;
 drop policy if exists "service_role_all" on enrollments;
 drop policy if exists "service_role_all" on send_log;
 drop policy if exists "service_role_all" on templates;
 drop policy if exists "service_role_all" on sequences;
+drop policy if exists "service_role_all" on ai_usage;
 
-create policy "service_role_all" on senders     for all using (true);
-create policy "service_role_all" on contacts    for all using (true);
-create policy "service_role_all" on enrollments for all using (true);
-create policy "service_role_all" on send_log    for all using (true);
-create policy "service_role_all" on templates   for all using (true);
-create policy "service_role_all" on sequences   for all using (true);
+revoke all on table senders, contacts, enrollments, send_log, templates,
+  sequences, ai_usage from anon, authenticated;
+revoke all on table todays_queue, available_senders, pipeline_summary
+  from anon, authenticated;
+
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table senders, contacts, enrollments,
+  send_log, templates, sequences, ai_usage to service_role;
+grant select on table todays_queue, available_senders, pipeline_summary
+  to service_role;
+
+revoke execute on function reset_daily_sends() from public, anon, authenticated;
+grant execute on function reset_daily_sends() to service_role;

@@ -6,7 +6,7 @@
 //
 // POST /api/update-status
 // { "email": "contact@practice.com", "status": "replied" }
-// status options: "replied" | "bounced" | "unsubscribed" | "paused"
+// status options: "replied" | "bounced" | "unsubscribed" | "paused" | "held"
 // ============================================================
 
 import { createClient } from '@supabase/supabase-js'
@@ -26,8 +26,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { email, status } = req.body
-  const validStatuses = ['replied', 'bounced', 'unsubscribed', 'paused', 'active']
+  const { email, status, hold_reason } = req.body
+  const validStatuses = ['replied', 'bounced', 'unsubscribed', 'paused', 'held', 'active']
 
   if (!email || !validStatuses.includes(status)) {
     return res.status(400).json({
@@ -49,6 +49,8 @@ export default async function handler(req, res) {
     .from('enrollments')
     .update({
       status:       status,
+      hold_reason:  status === 'held' ? hold_reason || 'Manual review required' : null,
+      held_at:      status === 'held' ? new Date().toISOString() : null,
       completed_at: ['replied','bounced','unsubscribed'].includes(status)
         ? new Date().toISOString() : null
     })

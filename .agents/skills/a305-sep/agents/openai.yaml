@@ -1,0 +1,6 @@
+interface:
+  display_name: "A305 Sep"
+  short_description: "Repo-specific patterns and workflows for a305-sep"
+  default_prompt: "Use the a305-sep repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true

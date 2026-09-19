@@ -18,6 +18,13 @@ import {
   verifySmtpSender,
 } from "@/lib/services/smtp.js";
 import { parseContactCsv } from "@/lib/utils/contact-import.js";
+import {
+  SUPPRESSION_SOURCES,
+  parseSuppressionCsv,
+  reinstateContact,
+  suppressContact,
+  toSuppressionCsv,
+} from "@/lib/services/suppression.js";
 import { runHostingerWarmup, startHostingerWarmup, type WarmupResult } from "@/lib/services/warmup";
 
 export type DashboardUnlockState = { error: string };
@@ -33,6 +40,11 @@ export type ContactImportState = {
   status: "error" | "idle" | "success";
 };
 export type ContactEnrichmentState = { message: string; status: "error" | "idle" | "success" };
+export type SuppressionActionState = {
+  csv?: string;
+  message: string;
+  status: "error" | "idle" | "success";
+};
 export type SequenceActionState = {
   message: string;
   status: "error" | "idle" | "success";
@@ -347,6 +359,155 @@ export async function importContacts(
   return {
     details: { duplicates: parsedImport.duplicateCount + existingEmails.size, enrolled: newContacts.length, invalid: parsedImport.errors.length, suppressed: 0 },
     message: `${newContacts.length} contact${newContacts.length === 1 ? "" : "s"} imported. They are not enrolled in a sequence and no email was sent.`,
+    status: "success",
+  };
+}
+
+// ── SUPPRESSION ─────────────────────────────────────────────────────────────
+// Suppress one address by hand: a reply asking to stop, a complaint, a
+// hard bounce someone spotted in the inbox. Goes through the same single
+// transaction the public unsubscribe route uses.
+export async function suppressContactByEmail(
+  _previousState: SuppressionActionState,
+  formData: FormData,
+): Promise<SuppressionActionState> {
+  if (!(await hasDashboardAccess())) return { message: "Dashboard session expired. Unlock it again.", status: "error" };
+  const email = String(formData.get("email") || "").trim();
+  const reason = String(formData.get("reason") || "").trim() || "Suppressed by an operator";
+  if (!email.includes("@")) return { message: "Enter the email address to suppress.", status: "error" };
+
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return { message: "Supabase is not configured.", status: "error" };
+
+  try {
+    const result = await suppressContact(supabase, {
+      email,
+      reason,
+      scope: "global",
+      source: SUPPRESSION_SOURCES.MANUAL,
+    });
+    revalidatePath("/contacts");
+    revalidatePath("/");
+    const stoodDown = Number(result?.enrollments_stood_down || 0);
+    return {
+      message: `${email} suppressed across both brands. ${stoodDown} active enrollment${stoodDown === 1 ? "" : "s"} stopped.`,
+      status: "success",
+    };
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : "Suppression failed.", status: "error" };
+  }
+}
+
+export async function reinstateContactByEmail(
+  _previousState: SuppressionActionState,
+  formData: FormData,
+): Promise<SuppressionActionState> {
+  if (!(await hasDashboardAccess())) return { message: "Dashboard session expired. Unlock it again.", status: "error" };
+  const email = String(formData.get("email") || "").trim();
+  if (!email.includes("@")) return { message: "Enter the email address to reinstate.", status: "error" };
+
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return { message: "Supabase is not configured.", status: "error" };
+
+  try {
+    await reinstateContact(supabase, { email, scope: "global" });
+    revalidatePath("/contacts");
+    revalidatePath("/");
+    return {
+      message: `${email} reinstated. No sequence was resumed; enroll them again deliberately.`,
+      status: "success",
+    };
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : "Reinstate failed.", status: "error" };
+  }
+}
+
+// Export and import are the round trip: a list exported here re-imports
+// here without loss, and imports from another platform land the same way.
+export async function exportSuppressions(): Promise<SuppressionActionState> {
+  if (!(await hasDashboardAccess())) return { message: "Dashboard session expired. Unlock it again.", status: "error" };
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return { message: "Supabase is not configured.", status: "error" };
+
+  const { data, error } = await supabase
+    .from("suppressions")
+    .select("value,match_type,scope,campaign,reason,source,created_at")
+    .order("created_at", { ascending: false });
+  if (error) return { message: `Suppression export failed: ${error.message}`, status: "error" };
+
+  const rows = data || [];
+  return {
+    csv: toSuppressionCsv(rows),
+    message: `${rows.length} suppression${rows.length === 1 ? "" : "s"} exported.`,
+    status: "success",
+  };
+}
+
+export async function importSuppressions(
+  _previousState: SuppressionActionState,
+  formData: FormData,
+): Promise<SuppressionActionState> {
+  if (!(await hasDashboardAccess())) return { message: "Dashboard session expired. Unlock it again.", status: "error" };
+  const suppressionFile = formData.get("suppressionFile");
+  let suppressionCsv = String(formData.get("suppressionsCsv") || "");
+  if (suppressionFile instanceof File && suppressionFile.size > 0) {
+    if (suppressionFile.size > 1_000_000) return { message: "CSV files must be smaller than 1 MB.", status: "error" };
+    suppressionCsv = await suppressionFile.text();
+  }
+
+  const parsed = parseSuppressionCsv(suppressionCsv);
+  if (parsed.rows.length === 0) {
+    return { message: parsed.errors[0] || "No valid suppressions were found.", status: "error" };
+  }
+
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return { message: "Supabase is not configured.", status: "error" };
+
+  // Email rows go through suppress_contact so an imported opt-out also
+  // stands down any sequence that address is sitting in. Domain rows have
+  // no single contact to stand down, so they are inserted directly.
+  let applied = 0;
+  let standDowns = 0;
+  for (const row of parsed.rows) {
+    if (row.match_type === "email") {
+      try {
+        const result = await suppressContact(supabase, {
+          campaign: row.campaign,
+          email: row.value,
+          reason: row.reason,
+          scope: row.scope,
+          source: row.source,
+        });
+        standDowns += Number(result?.enrollments_stood_down || 0);
+        applied += 1;
+      } catch {
+        parsed.errors.push(`${row.value}: could not be suppressed`);
+      }
+    } else {
+      const { error } = await supabase.from("suppressions").upsert(
+        {
+          campaign: row.campaign,
+          match_type: row.match_type,
+          reason: row.reason,
+          scope: row.scope,
+          source: row.source,
+          value: row.value,
+        },
+        { ignoreDuplicates: true, onConflict: "value,match_type,campaign" },
+      );
+      if (error) parsed.errors.push(`${row.value}: ${error.message}`);
+      else applied += 1;
+    }
+  }
+
+  revalidatePath("/contacts");
+  revalidatePath("/");
+  const skipped = parsed.errors.length;
+  return {
+    message:
+      `${applied} suppression${applied === 1 ? "" : "s"} imported, ` +
+      `${standDowns} active enrollment${standDowns === 1 ? "" : "s"} stopped` +
+      (skipped > 0 ? `, ${skipped} row${skipped === 1 ? "" : "s"} skipped.` : "."),
     status: "success",
   };
 }

@@ -11,6 +11,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 
+import { SUPPRESSION_SOURCES, suppressContact } from '../../lib/services/suppression.js'
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -35,11 +37,50 @@ export default async function handler(req, res) {
     })
   }
 
+  const normalizedEmail = email.toLowerCase().trim()
+
+  // Unsubscribes and hard bounces are suppressions, so they go through the
+  // one transaction that records the suppression, flags the contact and
+  // stands the enrollments down together. Doing those as separate writes is
+  // how a contact ends up suppressed in one table and mailable in another.
+  if (status === 'unsubscribed' || status === 'bounced') {
+    try {
+      const result = await suppressContact(supabase, {
+        email: normalizedEmail,
+        reason: status === 'bounced'
+          ? 'Hard bounce reported by an operator'
+          : 'Unsubscribe reported by an operator',
+        scope: 'global',
+        source: status === 'bounced'
+          ? SUPPRESSION_SOURCES.BOUNCE
+          : SUPPRESSION_SOURCES.REPLY
+      })
+
+      if (!result?.contact_found) {
+        return res.status(404).json({ error: 'Contact not found' })
+      }
+
+      // The contacts.bounced flag is separate from unsubscribed and the
+      // function does not set it, so a bounce still records it here.
+      if (status === 'bounced') {
+        await supabase.from('contacts').update({ bounced: true }).eq('id', result.contact_id)
+      }
+
+      return res.status(200).json({
+        contact_id: result.contact_id,
+        enrollments_stood_down: result.enrollments_stood_down,
+        message: `${normalizedEmail} marked as ${status} and suppressed`
+      })
+    } catch (suppressionError) {
+      return res.status(503).json({ error: suppressionError.message })
+    }
+  }
+
   // Find contact
   const { data: contact } = await supabase
     .from('contacts')
     .select('id')
-    .eq('email', email.toLowerCase().trim())
+    .eq('email', normalizedEmail)
     .single()
 
   if (!contact) return res.status(404).json({ error: 'Contact not found' })
@@ -56,14 +97,6 @@ export default async function handler(req, res) {
     })
     .eq('contact_id', contact.id)
     .eq('status', 'active')
-
-  // If bounced or unsubscribed, flag the contact record too
-  if (status === 'bounced') {
-    await supabase.from('contacts').update({ bounced: true }).eq('id', contact.id)
-  }
-  if (status === 'unsubscribed') {
-    await supabase.from('contacts').update({ unsubscribed: true }).eq('id', contact.id)
-  }
 
   return res.status(200).json({
     message: `${email} marked as ${status}`,

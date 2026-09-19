@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 
 import { createSenderGate } from '../../lib/services/sender-gate.js'
 import { createSmtpTransporter } from '../../lib/services/smtp.js'
+import { buildUnsubscribeUrl, getUnsubscribeSigningKey } from '../../lib/services/suppression.js'
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -125,6 +126,21 @@ export default async function handler(req, res) {
   // each mailbox is verified over SMTP at most once.
   const gate = createSenderGate()
 
+  // Where the unsubscribe link points. PUBLIC_BASE_URL wins; otherwise the
+  // request's own origin, so a preview deployment links to itself rather than
+  // to production. Without a signing key no one-click link can be minted and
+  // the mail falls back to the reply-to instruction.
+  const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host
+  const forwardedProtocol = req.headers['x-forwarded-proto'] || 'https'
+  const unsubscribeOrigin = getUnsubscribeSigningKey()
+    ? (process.env.PUBLIC_BASE_URL ||
+       (forwardedHost ? `${forwardedProtocol}://${forwardedHost}` : null))
+    : null
+
+  if (!unsubscribeOrigin) {
+    console.warn('No one-click unsubscribe link: set UNSUBSCRIBE_SECRET and PUBLIC_BASE_URL')
+  }
+
   try {
     // 1. Pull today's queue
     const { data: queue, error: qErr } = await supabase
@@ -172,12 +188,27 @@ export default async function handler(req, res) {
 
         // Replies route to the sender's configured inbox (aliases → main box)
         const replyTo = sender.reply_to || sender.email
-        // One-click list-unsubscribe (RFC 8058) → routes to the reply inbox
         const unsubMailto = `mailto:${replyTo}?subject=unsubscribe`
 
-        const footer =
-          `\n\n---\nDon't want to hear from me? Reply "unsubscribe" and I'll ` +
-          `take you off the list.`
+        // RFC 8058 one-click needs an https URI in List-Unsubscribe. Declaring
+        // List-Unsubscribe-Post against a mailto alone is invalid, and Gmail
+        // shows no native unsubscribe control for it — which is what the old
+        // header did. The https link is offered first, mailto as the fallback.
+        const unsubUrl = unsubscribeOrigin
+          ? buildUnsubscribeUrl(item.email, unsubscribeOrigin)
+          : null
+        const listUnsubscribeHeaders = unsubUrl
+          ? {
+              'List-Unsubscribe': `<${unsubUrl}>, <${unsubMailto}>`,
+              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+            }
+          : { 'List-Unsubscribe': `<${unsubMailto}>` }
+
+        const footer = unsubUrl
+          ? `\n\n---\nDon't want to hear from me? Unsubscribe here: ${unsubUrl}\n` +
+            `Or reply "unsubscribe" and I'll take you off the list.`
+          : `\n\n---\nDon't want to hear from me? Reply "unsubscribe" and I'll ` +
+            `take you off the list.`
 
         // Route Automate305 through Google Workspace and Aesthetic through Hostinger.
         const transporter = createSmtpTransporter(sender)
@@ -187,10 +218,7 @@ export default async function handler(req, res) {
           subject: subject,
           text:    body + footer,
           replyTo: replyTo,
-          headers: {
-            'List-Unsubscribe':      `<${unsubMailto}>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
-          }
+          headers: listUnsubscribeHeaders
         })
 
         // Log the send

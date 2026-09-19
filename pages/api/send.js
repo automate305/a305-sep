@@ -11,10 +11,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-import {
-  createSmtpTransporter,
-  senderIsEligible
-} from '../../lib/services/smtp.js'
+import { createSenderGate } from '../../lib/services/sender-gate.js'
+import { createSmtpTransporter } from '../../lib/services/smtp.js'
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -50,12 +48,13 @@ function mergeTemplate(text, contact, sender) {
 }
 
 // ── PICK AVAILABLE SENDER (campaign-scoped) ──────────────────
-async function pickSender(campaign) {
+// The query deliberately does NOT filter on warmed. An unwarmed mailbox
+// has to reach the gate to be refused by name; filtering it out in SQL
+// would hide which mailbox is still warming. The gate enforces warmed.
+async function pickSender(gate, campaign) {
   let query = supabase
     .from('senders')
     .select('*')
-    .eq('active', true)
-    .eq('warmed', true)
     .order('sends_today', { ascending: true })
 
   if (campaign) query = query.eq('campaign', campaign)
@@ -63,15 +62,8 @@ async function pickSender(campaign) {
   const { data, error } = await query
 
   if (error) throw new Error(`Sender lookup failed: ${error.message}`)
-  const sender = data?.find((candidateSender) => senderIsEligible(candidateSender))
 
-  if (!sender) {
-    throw new Error(
-      `No warmed, credentialed sender with remaining capacity for campaign "${campaign}"`
-    )
-  }
-
-  return sender
+  return gate.selectSender(data, campaign)
 }
 
 // ── ADVANCE ENROLLMENT (N-step, correct per-step delay) ──────
@@ -129,6 +121,10 @@ export default async function handler(req, res) {
 
   const results = { sent: [], failed: [], skipped: [] }
 
+  // One gate for this request: every send below is decided by it, and
+  // each mailbox is verified over SMTP at most once.
+  const gate = createSenderGate()
+
   try {
     // 1. Pull today's queue
     const { data: queue, error: qErr } = await supabase
@@ -150,7 +146,7 @@ export default async function handler(req, res) {
 
       try {
         // Pick a sender with capacity, scoped to this item's campaign
-        const sender = await pickSender(item.campaign)
+        const sender = await pickSender(gate, item.campaign)
 
         // Merge template
         const subject = mergeTemplate(item.subject, item, sender).toLowerCase()

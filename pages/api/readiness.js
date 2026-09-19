@@ -1,12 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-import {
-  getSmtpPasswordEnvironmentVariable,
-  getSmtpTransportSettings,
-  getSmtpVerificationError,
-  isUsableEnvironmentValue,
-  verifySmtpSender
-} from '../../lib/services/smtp.js'
+import { createSenderGate } from '../../lib/services/sender-gate.js'
+import { isUsableEnvironmentValue } from '../../lib/services/smtp.js'
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -66,55 +61,31 @@ export default async function handler(req, res) {
     })
   }
 
+  // Reported by the same gate that decides the send path, so readiness
+  // can never say yes to a mailbox the send path would refuse.
+  const gate = createSenderGate()
+
   const senderResults = await Promise.all((activeSenders || []).map(async (sender) => {
-    const passwordEnvironmentVariable = getSmtpPasswordEnvironmentVariable(sender.email)
-    const credentialConfigured = isUsableEnvironmentValue(
-      process.env[passwordEnvironmentVariable]
-    )
-    const transportSettings = getSmtpTransportSettings(sender)
+    const verdict = await gate.inspectSender(sender)
 
-    if (!credentialConfigured) {
-      return {
-        campaign: sender.campaign,
-        credentialConfigured: false,
-        email: sender.email,
-        error: {
-          code: 'SMTP_CREDENTIAL_MISSING',
-          message: 'SMTP credential is missing or still a placeholder'
-        },
-        provider: transportSettings.provider,
-        smtpAuthenticated: false,
-        warmed: sender.warmed
-      }
-    }
-
-    try {
-      await verifySmtpSender(sender)
-
-      return {
-        campaign: sender.campaign,
-        credentialConfigured: true,
-        email: sender.email,
-        error: null,
-        provider: transportSettings.provider,
-        smtpAuthenticated: true,
-        warmed: sender.warmed
-      }
-    } catch (verificationError) {
-      return {
-        campaign: sender.campaign,
-        credentialConfigured: true,
-        email: sender.email,
-        error: getSmtpVerificationError(verificationError),
-        provider: transportSettings.provider,
-        smtpAuthenticated: false,
-        warmed: sender.warmed
-      }
+    return {
+      // Readiness asks "permitted", not "sendable": the daily counters
+      // are reset after this check, so today's remaining budget is not
+      // a readiness question.
+      blockedBy: verdict.permittedBlockedBy,
+      campaign: verdict.campaign,
+      credentialConfigured: verdict.credentialConfigured,
+      email: verdict.email,
+      error: verdict.error,
+      permitted: verdict.permitted,
+      provider: verdict.provider,
+      smtpAuthenticated: verdict.smtpAuthenticated,
+      warmed: verdict.warmed
     }
   }))
 
   const ready = senderResults.length > 0 && senderResults.every(
-    (sender) => sender.credentialConfigured && sender.smtpAuthenticated && sender.warmed
+    (sender) => sender.permitted
   )
 
   return res.status(ready ? 200 : 503).json({

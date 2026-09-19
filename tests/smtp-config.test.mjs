@@ -7,8 +7,8 @@ import {
   getSmtpTransportSettings,
   isUsableEnvironmentValue,
   senderHasCapacity,
-  senderIsEligible,
 } from "../lib/services/smtp.js";
+import { describeSenderState } from "../lib/services/sender-gate.js";
 
 const baseSender = {
   active: true,
@@ -53,14 +53,19 @@ test("rejects placeholders, cold mailboxes, and exhausted senders", () => {
   assert.equal(senderHasCapacity({ ...baseSender, daily_limit: 0 }), false);
   assert.equal(senderHasCapacity({ ...baseSender, sends_today: 5 }), false);
   assert.equal(
-    senderIsEligible(baseSender, { SMTP_PASS_CAM: "your-cam-hostinger-password" }),
+    describeSenderState(baseSender, { SMTP_PASS_CAM: "your-cam-hostinger-password" })
+      .sendableStatically,
     false,
   );
   assert.equal(
-    senderIsEligible({ ...baseSender, warmed: false }, { SMTP_PASS_CAM: "real-app-password" }),
+    describeSenderState({ ...baseSender, warmed: false }, { SMTP_PASS_CAM: "real-app-password" })
+      .sendableStatically,
     false,
   );
-  assert.equal(senderIsEligible(baseSender, { SMTP_PASS_CAM: "real-app-password" }), true);
+  assert.equal(
+    describeSenderState(baseSender, { SMTP_PASS_CAM: "real-app-password" }).sendableStatically,
+    true,
+  );
 });
 
 test("runs no-send readiness before the Cowork daily send", async () => {
@@ -72,6 +77,10 @@ test("runs no-send readiness before the Cowork daily send", async () => {
 
   assert.ok(dailyTrigger.indexOf("await checkSendingReadiness()") < dailyTrigger.indexOf("await resetDailySends()"));
   assert.match(dailyTrigger, /\/api\/readiness/);
-  assert.match(sendRoute, /\.eq\('warmed', true\)/);
+  // The send route no longer filters warmed in SQL: an unwarmed mailbox
+  // has to reach the gate so the refusal can name it. The gate enforces
+  // warmed — see sender-gate.test.mjs.
+  assert.match(sendRoute, /createSenderGate\(\)/);
+  assert.match(sendRoute, /gate\.selectSender\(/);
   assert.doesNotMatch(sendRoute, /\.limit\(1\)/);
 });

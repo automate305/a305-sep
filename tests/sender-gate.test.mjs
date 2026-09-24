@@ -218,3 +218,122 @@ test("refuses when a campaign has no senders at all", async () => {
     },
   );
 });
+
+// ── Domain authentication in the gate (DNS_GATE_ENFORCED) ────────────────────
+function domainReport(domain, { dkim = "pass", dmarc = "pass", spf = "pass" } = {}) {
+  const entry = (status) => ({ status });
+  return { domain, results: { dkim: entry(dkim), dmarc: entry(dmarc), spf: entry(spf) } };
+}
+
+function recordingDomainChecker(reports) {
+  const looked = [];
+  async function checkDomain(domain) {
+    looked.push(domain);
+    return reports[domain];
+  }
+  checkDomain.looked = looked;
+  return checkDomain;
+}
+
+test("with DNS_GATE_ENFORCED off, the gate makes no DNS lookup and does not block on it", async () => {
+  const checkDomain = recordingDomainChecker({
+    "automate305.com": domainReport("automate305.com", { dkim: "fail" }),
+  });
+  const gate = createSenderGate({
+    checkDomain,
+    environment: CREDENTIALS,
+    verifySender: recordingVerifier(),
+  });
+
+  const selected = await gate.selectSender([cam], "hvac");
+
+  assert.equal(selected.email, "cam@automate305.com");
+  assert.deepEqual(checkDomain.looked, [], "off must mean off: no lookup at all");
+});
+
+test("only the exact string 'true' turns DNS enforcement on", async () => {
+  for (const value of ["1", "TRUE", "yes", "True", " true"]) {
+    const checkDomain = recordingDomainChecker({});
+    const gate = createSenderGate({
+      checkDomain,
+      environment: { ...CREDENTIALS, DNS_GATE_ENFORCED: value },
+      verifySender: recordingVerifier(),
+    });
+    await gate.selectSender([cam], "hvac");
+    assert.deepEqual(checkDomain.looked, [], `"${value}" must not enable enforcement`);
+  }
+});
+
+test("with enforcement on, a domain that does not authenticate is refused by name", async () => {
+  const gate = createSenderGate({
+    checkDomain: recordingDomainChecker({
+      "automate305.com": domainReport("automate305.com", { dkim: "fail", dmarc: "unknown" }),
+    }),
+    environment: { ...CREDENTIALS, DNS_GATE_ENFORCED: "true" },
+    verifySender: recordingVerifier(),
+  });
+
+  let thrown = null;
+  try {
+    await gate.selectSender([cam], "hvac");
+  } catch (error) {
+    thrown = error;
+  }
+
+  assert.ok(thrown, "an unauthenticated domain must not send when enforcement is on");
+  assert.match(
+    thrown.message,
+    /cam@automate305\.com: automate305\.com does not authenticate \(DKIM fail, DMARC unknown\)/,
+  );
+});
+
+test("with enforcement on, a domain whose lookup throws is refused, never waved through", async () => {
+  const gate = createSenderGate({
+    checkDomain: async () => { throw new Error("resolver exploded"); },
+    environment: { ...CREDENTIALS, DNS_GATE_ENFORCED: "true" },
+    verifySender: recordingVerifier(),
+  });
+
+  await assert.rejects(() => gate.selectSender([cam], "hvac"), /does not authenticate \(lookup failed\)/);
+});
+
+test("with enforcement on, an authenticating domain still selects cam@automate305.com", async () => {
+  const gate = createSenderGate({
+    checkDomain: recordingDomainChecker({ "automate305.com": domainReport("automate305.com") }),
+    environment: { ...CREDENTIALS, DNS_GATE_ENFORCED: "true" },
+    verifySender: recordingVerifier(),
+  });
+
+  assert.equal((await gate.selectSender([cam], "hvac")).email, "cam@automate305.com");
+});
+
+test("with enforcement on, each domain is looked up once however many mailboxes share it", async () => {
+  const checkDomain = recordingDomainChecker({ "automate305.com": domainReport("automate305.com") });
+  const gate = createSenderGate({
+    checkDomain,
+    environment: { ...CREDENTIALS, DNS_GATE_ENFORCED: "true" },
+    verifySender: recordingVerifier(),
+  });
+
+  await gate.inspectSender(cam);
+  await gate.inspectSender({ ...cam, email: "sales@automate305.com" });
+  await gate.selectSender([cam], "hvac");
+
+  assert.deepEqual(checkDomain.looked, ["automate305.com"]);
+});
+
+test("readiness sees the domain block too, so it cannot report ready on a failing domain", async () => {
+  const gate = createSenderGate({
+    checkDomain: recordingDomainChecker({
+      "automate305.com": domainReport("automate305.com", { spf: "fail" }),
+    }),
+    environment: { ...CREDENTIALS, DNS_GATE_ENFORCED: "true" },
+    verifySender: recordingVerifier(),
+  });
+
+  const verdict = await gate.inspectSender(cam);
+
+  assert.equal(verdict.permitted, false);
+  assert.equal(verdict.domainAuthenticated, false);
+  assert.equal(verdict.permittedBlockedBy[0].code, SENDER_BLOCK_CODES.DOMAIN_NOT_AUTHENTICATED);
+});

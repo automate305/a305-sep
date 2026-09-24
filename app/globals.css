@@ -270,3 +270,33 @@ table { font-size: 13px; }th { font-size: 10px; }
   margin-left: 1px;
   vertical-align: super;
 }
+
+/* ── Domain authentication panel (Phase 3) ───────────────────────────────── */
+.domain-list { display: grid; gap: 12px; padding: 16px 20px 20px; }
+.domain-card { border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.025); overflow: hidden; }
+.domain-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--purple-soft); }
+.domain-card > header > div { display: grid; gap: 2px; min-width: 0; }
+.domain-card > header strong { font-size: 13px; color: var(--text); }
+.domain-card > header span:not(.domain-status) { font-size: 10px; color: var(--muted); }
+.domain-status { flex: none; padding: 3px 8px; border-radius: 999px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid transparent; }
+.domain-status.pass { color: var(--green); background: rgba(81,217,154,.10); border-color: rgba(81,217,154,.25); }
+.domain-status.fail { color: var(--red); background: rgba(255,126,112,.10); border-color: rgba(255,126,112,.28); }
+.domain-status.unknown { color: var(--amber); background: rgba(244,189,95,.10); border-color: rgba(244,189,95,.25); }
+.domain-check { padding: 10px 14px; border-top: 1px solid var(--line); font-size: 11px; }
+.domain-check:first-of-type { border-top: 0; }
+.domain-check-head { display: grid; grid-template-columns: 64px 76px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.domain-check-head .domain-status { justify-self: start; }
+.domain-check-head strong { color: var(--text); font-size: 11px; }
+.domain-check-detail { color: #c9c1d4; overflow-wrap: anywhere; }
+.domain-check-head time { color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.domain-warning { margin: 7px 0 0 150px; color: var(--amber); font-size: 10px; }
+.domain-check details { margin: 7px 0 0 150px; }
+.domain-check summary { cursor: pointer; color: var(--muted); font-size: 10px; }
+.domain-check summary:hover { color: var(--text); }
+.domain-check ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.domain-check code { display: block; padding: 6px 8px; border-radius: 6px; background: rgba(0,0,0,.35); color: #b9b0c6; font-size: 10px; overflow-wrap: anywhere; white-space: pre-wrap; }
+@media (max-width: 720px) {
+  .domain-check-head { grid-template-columns: 64px minmax(0, 1fr); }
+  .domain-check-detail, .domain-check-head time { grid-column: 1 / -1; }
+  .domain-warning, .domain-check details { margin-left: 0; }
+}

@@ -26,6 +26,11 @@ import {
   toSuppressionCsv,
 } from "@/lib/services/suppression.js";
 import { runHostingerWarmup, startHostingerWarmup, type WarmupResult } from "@/lib/services/warmup";
+import {
+  DOMAIN_AUTH_BY_DOMAIN,
+  checkDomainAuthentication,
+  sendingDomainsFromSenders,
+} from "@/lib/services/domain-auth.js";
 
 export type DashboardUnlockState = { error: string };
 export type HoldReviewResult = { message: string; ok: boolean };
@@ -40,6 +45,29 @@ export type ContactImportState = {
   status: "error" | "idle" | "success";
 };
 export type ContactEnrichmentState = { message: string; status: "error" | "idle" | "success" };
+export type DomainCheckStatus = "fail" | "pass" | "unknown";
+export type DomainCheckEntry = {
+  check: string;
+  checkedAt: string;
+  detail: string;
+  observed: string[];
+  queried: string[];
+  status: DomainCheckStatus;
+  warnings: string[];
+};
+export type DomainAuthenticationReport = {
+  checkedAt: string;
+  configured: boolean;
+  domain: string;
+  overall: DomainCheckStatus;
+  provider: string | null;
+  results: Record<"blocklist" | "dkim" | "dmarc" | "mx" | "spf", DomainCheckEntry>;
+};
+export type DomainAuthenticationResult = {
+  domains: DomainAuthenticationReport[];
+  message: string;
+  ok: boolean;
+};
 export type SuppressionActionState = {
   csv?: string;
   message: string;
@@ -132,6 +160,39 @@ export async function runSmtpReadinessCheck(): Promise<SmtpReadinessResult> {
     message: ready ? "SMTP authenticated. No email was sent." : "SMTP is not ready. No email was sent.",
     ready,
     senders,
+  };
+}
+
+// Read-only. Every row it returns is a DNS lookup made during this call,
+// stamped with when it ran. It writes nothing to DNS or to Supabase.
+export async function runDomainAuthenticationCheck(): Promise<DomainAuthenticationResult> {
+  if (!(await hasDashboardAccess())) {
+    return { domains: [], message: "Dashboard session expired. Unlock it again.", ok: false };
+  }
+
+  // Check every domain an active mailbox sends from, so a third sending
+  // domain added later can never be silently missing from this panel. The
+  // configured domains are always included, even with no active sender.
+  const supabase = getSupabaseAdminClient();
+  let senderDomains: string[] = [];
+  if (supabase) {
+    const { data } = await supabase.from("senders").select("email").eq("active", true);
+    senderDomains = sendingDomainsFromSenders(data || []);
+  }
+  const domains = [...new Set([...senderDomains, ...Object.keys(DOMAIN_AUTH_BY_DOMAIN)])].sort();
+
+  const reports = await Promise.all(domains.map((domain) => checkDomainAuthentication(domain)));
+  const failing = reports.filter((report) => report.overall === "fail").length;
+  const unknown = reports.filter((report) => report.overall === "unknown").length;
+
+  return {
+    domains: reports as DomainAuthenticationReport[],
+    message: failing > 0
+      ? `${failing} of ${reports.length} domains have a failing check. No DNS was changed.`
+      : unknown > 0
+        ? `${unknown} of ${reports.length} domains could not be fully checked. No DNS was changed.`
+        : `All ${reports.length} domains authenticate. No DNS was changed.`,
+    ok: failing === 0 && unknown === 0,
   };
 }
 

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { lockDashboard, reviewHeldMessage, runSmtpReadinessCheck, runWarmup, startWarmup, type SmtpReadinessResult, type WarmupResult } from "@/app/actions";
+import { lockDashboard, reviewHeldMessage, runDomainAuthenticationCheck, runSmtpReadinessCheck, runWarmup, startWarmup, type DomainAuthenticationResult, type DomainCheckEntry, type SmtpReadinessResult, type WarmupResult } from "@/app/actions";
 import { ContactEnrollmentPanel } from "@/components/dashboard/contact-enrollment-panel";
 import { ContactsPagePanel } from "@/components/dashboard/contacts-page-panel";
 import { SequenceBuilderPanel } from "@/components/dashboard/sequence-builder-panel";
@@ -156,6 +156,8 @@ export function OutreachDashboard({
   const [notice, setNotice] = useState("");
   const [pendingHoldId, setPendingHoldId] = useState<string | null>(null);
   const [readinessResult, setReadinessResult] = useState<SmtpReadinessResult | null>(null);
+  const [domainResult, setDomainResult] = useState<DomainAuthenticationResult | null>(null);
+  const [isDomainCheckPending, startDomainCheckTransition] = useTransition();
   const [warmupResult, setWarmupResult] = useState<WarmupResult | null>(null);
   const [selectedQueueItem, setSelectedQueueItem] = useState<DashboardQueueItem | null>(null);
   const [isReviewPending, startReviewTransition] = useTransition();
@@ -211,6 +213,15 @@ export function OutreachDashboard({
     startReviewTransition(async () => {
       const result = await runSmtpReadinessCheck();
       setReadinessResult(result);
+    });
+  }
+
+  // DNS reads only. Its own transition, so a slow blocklist lookup never
+  // disables the mailbox and warmup buttons.
+  function handleDomainCheck() {
+    startDomainCheckTransition(async () => {
+      const result = await runDomainAuthenticationCheck();
+      setDomainResult(result);
     });
   }
 
@@ -332,6 +343,17 @@ export function OutreachDashboard({
             ) : <div className="measurement-note"><Icon name="activity" /><span><strong>Health measurement is ready.</strong>Add real provider scores to Supabase; the dashboard will never invent them.</span></div>}
           </section>}
 
+          {view === "infrastructure" && <section className="panel domain-panel" id="domain-authentication">
+            <div className="panel-heading"><div><p className="section-kicker">DOMAIN AUTHENTICATION</p><h2>SPF, DKIM, DMARC &amp; blocklists</h2></div><div className="readiness-actions"><button className="secondary-action" disabled={isDomainCheckPending} onClick={handleDomainCheck} type="button">{isDomainCheckPending ? "Looking up…" : domainResult ? "Recheck DNS" : "Check DNS"}</button><span>Read-only · changes no DNS</span></div></div>
+            {domainResult ? <>
+              <div className={`readiness-result ${domainResult.ok ? "ready" : "not-ready"}`}><strong>{domainResult.message}</strong></div>
+              <div className="domain-list">{domainResult.domains.map((report) => <article className="domain-card" key={report.domain}>
+                <header><div><strong>{report.domain}</strong><span>{report.provider || "No provider expectations configured"} · checked {formatCheckedTime(report.checkedAt)}</span></div><span className={`domain-status ${report.overall}`}>{report.overall}</span></header>
+                {(["spf", "dkim", "dmarc", "mx", "blocklist"] as const).map((check) => <DomainCheckRow entry={report.results[check]} key={check} />)}
+              </article>)}</div>
+            </> : <div className="measurement-note"><Icon name="activity" /><span><strong>Nothing checked yet.</strong>Every status here comes from a live DNS lookup made when you press the button. Nothing is cached or assumed.</span></div>}
+          </section>}
+
           {view === "infrastructure" && <div className="side-by-side">
             <section className="panel warmup-panel">
               <div className="panel-heading"><div><p className="section-kicker">SAFE RAMP</p><h2>Warmup board</h2></div><div className="readiness-actions"><button className="secondary-action" disabled={isReviewPending} onClick={handleStartWarmup} type="button">Start 21-day warmup</button><button className="secondary-action" disabled={isReviewPending} onClick={handleRunWarmup} type="button">Send today&apos;s seed mail</button></div></div>
@@ -380,3 +402,33 @@ export function OutreachDashboard({
     </div>
   );
 }
+
+const DOMAIN_CHECK_LABELS: Record<string, string> = {
+  blocklist: "Blocklists",
+  dkim: "DKIM",
+  dmarc: "DMARC",
+  mx: "MX",
+  spf: "SPF",
+};
+
+function formatCheckedTime(isoTimestamp: string) {
+  return new Date(isoTimestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+// Record text comes from DNS, which is untrusted. It is rendered as React
+// text children only, so it is escaped, never interpreted as markup.
+function DomainCheckRow({ entry }: { entry: DomainCheckEntry }) {
+  return (
+    <div className="domain-check">
+      <div className="domain-check-head">
+        <span className={`domain-status ${entry.status}`}>{entry.status}</span>
+        <strong>{DOMAIN_CHECK_LABELS[entry.check] || entry.check}</strong>
+        <span className="domain-check-detail">{entry.detail}</span>
+        <time dateTime={entry.checkedAt}>{formatCheckedTime(entry.checkedAt)}</time>
+      </div>
+      {entry.warnings.map((warning) => <p className="domain-warning" key={warning}>{warning}</p>)}
+      {entry.observed.length > 0 ? <details><summary>What DNS returned ({entry.queried.length} {entry.queried.length === 1 ? "query" : "queries"})</summary><ul>{entry.observed.map((line) => <li key={line}><code>{line}</code></li>)}</ul></details> : null}
+    </div>
+  );
+}
+

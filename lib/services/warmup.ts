@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { createSmtpTransporter, isUsableEnvironmentValue, verifySmtpSender } from "@/lib/services/smtp.js";
+import { createSmtpTransporter, isUsableEnvironmentValue, verifySmtpSender } from "./smtp.js";
 
 const WARMUP_SENDER_EMAILS = ["matt@aestheticdevicepro.com", "tamiko@aestheticdevicepro.com"];
 
@@ -16,14 +16,32 @@ type WarmupSender = {
   warmup_started_at: string | null;
 };
 
-export type WarmupResult = { message: string; ok: boolean; sent: number };
+export type WarmupSenderProgress = {
+  activeDay: number;
+  email: string;
+  readyToGraduate: boolean;
+};
 
-function easternDayStart() {
+export type WarmupResult = {
+  message: string;
+  ok: boolean;
+  progress?: WarmupSenderProgress[];
+  sent: number;
+};
+
+const TOTAL_WARMUP_DAYS = 21;
+
+// "YYYY-MM-DD" in America/New_York, the calendar day a send counts toward.
+function easternDateKey(date: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     day: "2-digit", month: "2-digit", timeZone: "America/New_York", year: "numeric",
-  }).formatToParts(new Date());
+  }).formatToParts(date);
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
-  return `${value("year")}-${value("month")}-${value("day")}T00:00:00-04:00`;
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function easternDayStart() {
+  return `${easternDateKey(new Date())}T00:00:00-04:00`;
 }
 
 function recipients() {
@@ -40,9 +58,33 @@ function dailyCap(day: number) {
   return 4;
 }
 
-function warmupDay(startedAt: string) {
-  const elapsed = Math.max(Date.now() - new Date(startedAt).getTime(), 0);
-  return Math.min(Math.floor(elapsed / 86_400_000) + 1, 21);
+// Day N of warmup means "the Nth distinct calendar day this mailbox has
+// actually sent on" — not calendar time since warmup_started_at. A mailbox
+// silent for two weeks mid-ramp does not arrive back at a high cap just
+// because the calendar moved; it resumes at the same rung it left off on.
+// warmup_started_at itself is never read here and never written by this
+// function — only startHostingerWarmup sets it, once, per the non-negotiable
+// that resetting it restarts the clock on mailboxes already days into warming.
+export async function activeWarmupDay(
+  supabase: NonNullable<ReturnType<typeof client>>,
+  senderId: string,
+  referenceDate: Date = new Date(),
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("send_log")
+    .select("sent_at")
+    .eq("sender_id", senderId)
+    .eq("status", "warmup");
+  if (error) throw error;
+
+  const todayKey = easternDateKey(referenceDate);
+  const priorActiveDays = new Set(
+    ((data || []) as { sent_at: string }[])
+      .map((row) => easternDateKey(new Date(row.sent_at)))
+      .filter((key) => key !== todayKey),
+  );
+
+  return Math.min(priorActiveDays.size + 1, TOTAL_WARMUP_DAYS);
 }
 
 function client() {
@@ -85,12 +127,18 @@ export async function runHostingerWarmup(): Promise<WarmupResult> {
   if (activeSenders.length !== WARMUP_SENDER_EMAILS.length) return { message: "Start Matt and Tamiko's warmup first. No email was sent.", ok: false, sent: 0 };
 
   let sent = 0;
+  const progress: WarmupSenderProgress[] = [];
   for (const [senderIndex, sender] of activeSenders.entries()) {
-    const day = warmupDay(sender.warmup_started_at!);
+    let day: number;
+    try {
+      day = await activeWarmupDay(supabase, sender.id);
+    } catch (dayError) {
+      return { message: `Unable to compute warmup progress: ${dayError instanceof Error ? dayError.message : "unknown error"}`, ok: false, progress, sent };
+    }
     const cap = Math.min(dailyCap(day), seedRecipients.length);
     const { count, error: countError } = await supabase.from("send_log").select("id", { count: "exact", head: true })
       .eq("sender_id", sender.id).eq("status", "warmup").gte("sent_at", easternDayStart());
-    if (countError) return { message: `Unable to check today's warmup activity: ${countError.message}`, ok: false, sent };
+    if (countError) return { message: `Unable to check today's warmup activity: ${countError.message}`, ok: false, progress, sent };
     const remaining = Math.max(cap - (count || 0), 0);
     for (let offset = 0; offset < remaining; offset += 1) {
       const recipient = seedRecipients[(day + senderIndex + (count || 0) + offset - 1) % seedRecipients.length];
@@ -107,10 +155,14 @@ export async function runHostingerWarmup(): Promise<WarmupResult> {
         if (logError) throw logError;
         sent += 1;
       } catch (sendError) {
-        return { message: `Warmup stopped after ${sent} send${sent === 1 ? "" : "s"}: ${sendError instanceof Error ? sendError.message : "SMTP send failed"}`, ok: false, sent };
+        return { message: `Warmup stopped after ${sent} send${sent === 1 ? "" : "s"}: ${sendError instanceof Error ? sendError.message : "SMTP send failed"}`, ok: false, progress, sent };
       }
     }
     await supabase.from("senders").update({ daily_limit: cap, sends_today: cap - remaining + remaining }).eq("id", sender.id);
+    // Reaching day 21 only means the ramp is complete, never that `warmed`
+    // gets flipped here — graduating a mailbox to real sends is a deliberate
+    // operator action, not a side effect of this running on schedule.
+    progress.push({ activeDay: day, email: sender.email, readyToGraduate: day >= TOTAL_WARMUP_DAYS });
   }
-  return { message: sent ? `${sent} internal warmup message${sent === 1 ? "" : "s"} sent. No prospects or sequences were used.` : "Today's warmup cap was already reached. No email was sent.", ok: true, sent };
+  return { message: sent ? `${sent} internal warmup message${sent === 1 ? "" : "s"} sent. No prospects or sequences were used.` : "Today's warmup cap was already reached. No email was sent.", ok: true, progress, sent };
 }

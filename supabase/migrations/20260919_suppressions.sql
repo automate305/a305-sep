@@ -131,7 +131,9 @@ order by e.next_send_date;
 -- one place and mailable in another.
 --
 -- Deliberately NOT security definer: the caller is the server holding the
--- service role key. Nothing is granted to anon, so the browser cannot reach it.
+-- service role key. Supabase grants EXECUTE to anon and authenticated by
+-- default; 20261108_suppression_function_grants.sql revokes it so only
+-- service_role can call these functions.
 --
 -- Held enrollments are left strictly alone — only status = 'active' rows stand
 -- down. The 337 held enrollments are not this function's business.

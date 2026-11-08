@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { activeWarmupDay } from "../lib/services/warmup.ts";
+import { activeWarmupDay, warmupMessage } from "../lib/services/warmup.ts";
 
 // Real send_log history for matt@/tamiko@aestheticdevicepro.com, captured
 // 30 Sep 2026. Active days: Sep 1,2,3,5,6,7,10,23,24 — 9 distinct days,
@@ -169,4 +169,63 @@ test("vercel.json runs warmup every day, unlike the weekday-only campaign cron",
 
   assert.ok(warmupCron, "vercel.json must register the warmup cron");
   assert.equal(warmupCron.schedule, "0 13 * * *");
+});
+
+// ── Warmup wording ───────────────────────────────────────────────────────────
+const VARIANTS = Array.from({ length: 300 }, (_, variant) => variant);
+
+test("every warmup wording follows the copy rules", () => {
+  for (const variant of VARIANTS) {
+    for (const name of ["Matt", "Tamiko"]) {
+      const { subject, text } = warmupMessage(name, variant);
+      const [greeting, body, closingAndName] = text.split("\n\n");
+      const [closing, signedAs, ...rest] = closingAndName.split("\n");
+
+      assert.match(subject, /^[a-z]+( [a-z]+){2,3}$/, `subject "${subject}" must be lowercase, three or four words`);
+      assert.match(greeting, /^[A-Z][a-z]+,$/, `greeting "${greeting}" must be sentence case`);
+      assert.match(body, /^[A-Z]/, "body must start with a capital");
+      assert.notEqual(body, body.toLowerCase(), "body must never be all lowercase");
+      assert.doesNotMatch(text, /[—–]/, "no em or en dashes");
+      assert.doesNotMatch(text, /https?:|www\.|\{\{/, "no links or unresolved placeholders");
+      assert.doesNotMatch(text, /camilo/i, "Aesthetic senders never sign as Camilo");
+      assert.match(closing, /^[A-Z]/);
+      assert.equal(signedAs, name, "signed with the sending mailbox's own name");
+      assert.deepEqual(rest, [], "nothing after the signature");
+    }
+  }
+});
+
+test("consecutive sends never repeat a subject or a body", () => {
+  for (let start = 0; start < 100; start += 1) {
+    const subjects = new Set();
+    for (let offset = 0; offset < 7; offset += 1) subjects.add(warmupMessage("Matt", start + offset).subject);
+    assert.equal(subjects.size, 7, `seven consecutive sends from ${start} must use seven subjects`);
+
+    const bodies = new Set();
+    for (let offset = 0; offset < 5; offset += 1) bodies.add(warmupMessage("Matt", start + offset).text.split("\n\n")[1]);
+    assert.equal(bodies.size, 5, `five consecutive sends from ${start} must use five bodies`);
+  }
+});
+
+test("the wording genuinely varies across a ramp, not just by one field", () => {
+  const distinctMessages = new Set(VARIANTS.map((variant) => warmupMessage("Matt", variant).text));
+  const distinctSubjects = new Set(VARIANTS.map((variant) => warmupMessage("Matt", variant).subject));
+
+  assert.ok(distinctMessages.size >= 20, `expected at least 20 distinct messages, got ${distinctMessages.size}`);
+  assert.ok(distinctSubjects.size >= 6, `expected at least 6 distinct subjects, got ${distinctSubjects.size}`);
+});
+
+test("a bad variant number cannot produce a broken message", () => {
+  for (const variant of [-3, 2.7, Number.MAX_SAFE_INTEGER]) {
+    const { subject, text } = warmupMessage("Tamiko", variant);
+    assert.ok(subject.length > 0 && text.endsWith("Tamiko"), `variant ${variant} must still yield a full message`);
+  }
+});
+
+test("the send path uses the varied wording and no longer hard-codes one message", async () => {
+  const source = await readFile(new URL("../lib/services/warmup.ts", import.meta.url), "utf8");
+
+  assert.match(source, /warmupMessage\(sender\.name, variant\)/);
+  assert.doesNotMatch(source, /subject: "Quick mailbox setup check"/, "the single hard-coded subject must be gone");
+  assert.match(source, /subject: "Internal mailbox setup check"/, "the send_log label is unchanged");
 });

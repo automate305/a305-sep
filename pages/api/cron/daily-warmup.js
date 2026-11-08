@@ -1,7 +1,7 @@
 // ============================================================
 // Automate305 SEP · /api/cron/daily-warmup
 //
-// Fires runHostingerWarmup() on a schedule instead of requiring someone
+// Fires runWarmup() on a schedule instead of requiring someone
 // to click "Send today's seed mail" in the dashboard every day. Same
 // auth pattern as /api/cron/daily-send: a bearer CRON_SECRET, and an
 // explicit automation flag that defaults off.
@@ -17,7 +17,7 @@
 // ============================================================
 
 import { isUsableEnvironmentValue } from '../../../lib/services/smtp.js'
-import { runHostingerWarmup } from '../../../lib/services/warmup.ts'
+import { runWarmup } from '../../../lib/services/warmup.ts'
 
 const automationEnabled = () => process.env.WARMUP_AUTOMATION_ENABLED === 'true'
 
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     })
   }
 
-  const result = await runHostingerWarmup()
+  const result = await runWarmup()
 
   return res.status(result.ok ? 200 : 503).json(result)
 }

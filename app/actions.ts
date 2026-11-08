@@ -25,7 +25,7 @@ import {
   suppressContact,
   toSuppressionCsv,
 } from "@/lib/services/suppression.js";
-import { runHostingerWarmup, startHostingerWarmup, type WarmupResult } from "@/lib/services/warmup";
+import { runWarmup as executeWarmupRun, startHostingerWarmup, type WarmupResult } from "@/lib/services/warmup";
 import {
   DOMAIN_AUTH_BY_DOMAIN,
   checkDomainAuthentication,
@@ -205,7 +205,7 @@ export async function startWarmup(): Promise<WarmupResult> {
 
 export async function runWarmup(): Promise<WarmupResult> {
   if (!(await hasDashboardAccess())) return { message: "Dashboard session expired. Unlock it again.", ok: false, sent: 0 };
-  const result = await runHostingerWarmup();
+  const result = await executeWarmupRun();
   if (result.ok) revalidatePath("/");
   return result;
 }

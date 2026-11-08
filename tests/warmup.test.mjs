@@ -58,8 +58,8 @@ test("a mailbox silent for two weeks does not jump to a high cap", async () => {
     new Date("2026-09-30T13:30:00.000Z"),
   );
 
-  assert.notEqual(day, 21, "calendar time passing must not, by itself, complete the ramp");
-  assert.ok(day < 21, "a genuinely interrupted ramp must still show real days left");
+  assert.notEqual(day, 28, "calendar time passing must not, by itself, complete the ramp");
+  assert.ok(day < 28, "a genuinely interrupted ramp must still show real days left");
 });
 
 test("a send already made today does not double-count today", async () => {
@@ -75,14 +75,14 @@ test("a brand-new mailbox with no history starts at day 1", async () => {
   assert.equal(day, 1);
 });
 
-test("caps at 21 once 21 distinct active days have genuinely happened", async () => {
-  const twentyFiveDistinctDays = Array.from(
-    { length: 25 },
+test("caps at 28 once 28 distinct active days have genuinely happened", async () => {
+  const thirtyDistinctDays = Array.from(
+    { length: 30 },
     (_, index) => `2026-01-${String(index + 1).padStart(2, "0")}T12:00:00.000Z`,
   );
-  const day = await activeWarmupDay(fakeSupabase(twentyFiveDistinctDays), "sender-1", new Date("2026-02-01T12:00:00.000Z"));
+  const day = await activeWarmupDay(fakeSupabase(thirtyDistinctDays), "sender-1", new Date("2026-02-01T12:00:00.000Z"));
 
-  assert.equal(day, 21);
+  assert.equal(day, 28);
 });
 
 test("a send that throws propagates rather than silently resuming at day 1", async () => {
@@ -159,7 +159,7 @@ test("non-GET methods are refused", async () => {
 test("the cron never calls startHostingerWarmup — it only runs an existing ramp", async () => {
   const route = await readFile(new URL("../pages/api/cron/daily-warmup.js", import.meta.url), "utf8");
 
-  assert.match(route, /runHostingerWarmup/);
+  assert.match(route, /runWarmup/);
   assert.doesNotMatch(route, /startHostingerWarmup/);
 });
 

@@ -1,0 +1,274 @@
+// ============================================================
+// Automate305 SEP · /api/send.js
+// Vercel serverless function — receives daily trigger,
+// pulls today's queue from Supabase, then routes SMTP by sender domain:
+// Google Workspace for automate305.com and Hostinger for aestheticdevicepro.com.
+//
+// Multi-campaign: each queue item carries its sequence's campaign
+// ('aesthetic' | 'hvac') and a sender is picked from the SAME campaign,
+// so HVAC mail never goes out from the aesthetic mailboxes.
+// ============================================================
+
+import { createClient } from '@supabase/supabase-js'
+
+import { createSenderGate } from '../../lib/services/sender-gate.js'
+import { createSmtpTransporter } from '../../lib/services/smtp.js'
+import { buildUnsubscribeUrl, getUnsubscribeSigningKey } from '../../lib/services/suppression.js'
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY   // service role key — never anon
+)
+
+const MAX_STEP_FALLBACK = 10   // safety bound if a template lookup ever fails
+
+// ── TEMPLATE MERGE ───────────────────────────────────────────
+// Supports both the aesthetic variables (practice_name, sender_name) and
+// the HVAC/ColdIQ variables (company, signature, personalized_line, etc.).
+function mergeTemplate(text, contact, sender) {
+  const area = contact.area || contact.city || 'South Florida'
+  const fallbackPersonalizedParagraph = contact.campaign === 'aesthetic'
+    ? `I came across ${contact.practice_name || 'your practice'} while reviewing local aesthetics teams.`
+    : 'I came across your company while looking at HVAC shops in the area.'
+  return (text || '')
+    .replace(/{{first_name}}/g,             contact.first_name    || 'there')
+    .replace(/{{last_name}}/g,              contact.last_name     || '')
+    .replace(/{{practice_name}}/g,          contact.practice_name || 'your practice')
+    .replace(/{{company}}/g,                contact.company || contact.practice_name || 'your company')
+    .replace(/{{sender_name}}/g,            sender.name)
+    .replace(/{{signature}}/g,              sender.signature || sender.name)
+    .replace(/{{personalized_line}}/g,      contact.personalized_line ||
+             'I came across your company while looking at HVAC shops in the area.')
+    .replace(/{{personalized_paragraph}}/g, contact.personalized_paragraph ||
+             contact.personalized_line ||
+             fallbackPersonalizedParagraph)
+    .replace(/{{pain_point}}/g,             contact.pain_point || 'scheduling and dispatch')
+    .replace(/{{area}}/g,                   area)
+    .replace(/{{website_observation}}/g,    contact.website_observation ||
+             'There are a few quick wins that could help it convert more visitors into booked calls.')
+}
+
+// ── PICK AVAILABLE SENDER (campaign-scoped) ──────────────────
+// The query deliberately does NOT filter on warmed. An unwarmed mailbox
+// has to reach the gate to be refused by name; filtering it out in SQL
+// would hide which mailbox is still warming. The gate enforces warmed.
+async function pickSender(gate, campaign) {
+  let query = supabase
+    .from('senders')
+    .select('*')
+    .order('sends_today', { ascending: true })
+
+  if (campaign) query = query.eq('campaign', campaign)
+
+  const { data, error } = await query
+
+  if (error) throw new Error(`Sender lookup failed: ${error.message}`)
+
+  return gate.selectSender(data, campaign)
+}
+
+// ── ADVANCE ENROLLMENT (N-step, correct per-step delay) ──────
+// Looks up the NEXT step's template to decide whether the sequence is
+// finished and, if not, how many days until that next step goes out
+// (delay_days = days after the previous step).
+async function advanceEnrollment(enrollmentId, sequenceId, currentStep) {
+  const nextStep = currentStep + 1
+
+  const { data: nextTpl } = await supabase
+    .from('templates')
+    .select('delay_days')
+    .eq('sequence_id', sequenceId)
+    .eq('step', nextStep)
+    .maybeSingle()
+
+  if (!nextTpl || nextStep > MAX_STEP_FALLBACK) {
+    // No further step → sequence complete
+    await supabase
+      .from('enrollments')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', enrollmentId)
+    return
+  }
+
+  const nextDate = new Date()
+  nextDate.setDate(nextDate.getDate() + (nextTpl.delay_days || 0))
+
+  await supabase
+    .from('enrollments')
+    .update({
+      current_step:   nextStep,
+      next_send_date: nextDate.toISOString().split('T')[0]
+    })
+    .eq('id', enrollmentId)
+}
+
+// ── MAIN HANDLER ─────────────────────────────────────────────
+export default async function handler(req, res) {
+
+  // Auth check — shared secret between Cowork trigger and this webhook
+  const secret = req.headers['x-a305-secret']
+  if (secret !== process.env.WEBHOOK_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  const requestedCampaign = typeof req.query.campaign === 'string' ? req.query.campaign.trim() : ''
+  if (requestedCampaign && !/^[a-z0-9_]+$/.test(requestedCampaign)) {
+    return res.status(400).json({ error: 'Invalid campaign filter' })
+  }
+
+  const results = { sent: [], failed: [], skipped: [] }
+
+  // One gate for this request: every send below is decided by it, and
+  // each mailbox is verified over SMTP at most once.
+  const gate = createSenderGate()
+
+  // Where the unsubscribe link points. PUBLIC_BASE_URL wins; otherwise the
+  // request's own origin, so a preview deployment links to itself rather than
+  // to production. Without a signing key no one-click link can be minted and
+  // the mail falls back to the reply-to instruction.
+  const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host
+  const forwardedProtocol = req.headers['x-forwarded-proto'] || 'https'
+  const unsubscribeOrigin = getUnsubscribeSigningKey()
+    ? (process.env.PUBLIC_BASE_URL ||
+       (forwardedHost ? `${forwardedProtocol}://${forwardedHost}` : null))
+    : null
+
+  if (!unsubscribeOrigin) {
+    console.warn('No one-click unsubscribe link: set UNSUBSCRIBE_SECRET and PUBLIC_BASE_URL')
+  }
+
+  try {
+    // 1. Pull today's queue
+    const { data: queue, error: qErr } = await supabase
+      .from('todays_queue')
+      .select('*')
+
+    if (qErr) throw qErr
+    const campaignQueue = requestedCampaign
+      ? (queue || []).filter((item) => item.campaign === requestedCampaign)
+      : queue || []
+    if (campaignQueue.length === 0) {
+      return res.status(200).json({ message: 'Nothing in queue today', results })
+    }
+
+    console.log(`📬 Queue: ${campaignQueue.length} emails to process`)
+
+    // 2. Process each enrollment
+    for (const item of campaignQueue) {
+
+      try {
+        // Pick a sender with capacity, scoped to this item's campaign
+        const sender = await pickSender(gate, item.campaign)
+
+        // Merge template
+        const subject = mergeTemplate(item.subject, item, sender).toLowerCase()
+        const body = mergeTemplate(item.body_text, item, sender)
+
+        // Fail closed before SMTP if a template contains an unknown merge field.
+        const subjectWordCount = subject.split(/\s+/).filter(Boolean).length
+        if (/{{[^}]+}}/.test(subject) || /{{[^}]+}}/.test(body) || body.includes('—') || subjectWordCount < 3 || subjectWordCount > 4) {
+          await supabase
+            .from('enrollments')
+            .update({
+              status: 'held',
+              hold_reason: 'Template failed copy safeguards',
+              held_at: new Date().toISOString()
+            })
+            .eq('id', item.enrollment_id)
+          results.skipped.push({
+            email: item.email,
+            reason: 'Template failed copy safeguards'
+          })
+          continue
+        }
+
+        // Replies route to the sender's configured inbox (aliases → main box)
+        const replyTo = sender.reply_to || sender.email
+        const unsubMailto = `mailto:${replyTo}?subject=unsubscribe`
+
+        // RFC 8058 one-click needs an https URI in List-Unsubscribe. Declaring
+        // List-Unsubscribe-Post against a mailto alone is invalid, and Gmail
+        // shows no native unsubscribe control for it — which is what the old
+        // header did. The https link is offered first, mailto as the fallback.
+        const unsubUrl = unsubscribeOrigin
+          ? buildUnsubscribeUrl(item.email, unsubscribeOrigin)
+          : null
+        const listUnsubscribeHeaders = unsubUrl
+          ? {
+              'List-Unsubscribe': `<${unsubUrl}>, <${unsubMailto}>`,
+              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+            }
+          : { 'List-Unsubscribe': `<${unsubMailto}>` }
+
+        const footer = unsubUrl
+          ? `\n\n---\nDon't want to hear from me? Unsubscribe here: ${unsubUrl}\n` +
+            `Or reply "unsubscribe" and I'll take you off the list.`
+          : `\n\n---\nDon't want to hear from me? Reply "unsubscribe" and I'll ` +
+            `take you off the list.`
+
+        // Route Automate305 through Google Workspace and Aesthetic through Hostinger.
+        const transporter = createSmtpTransporter(sender)
+        await transporter.sendMail({
+          from:    `"${sender.name}" <${sender.email}>`,
+          to:      item.email,
+          subject: subject,
+          text:    body + footer,
+          replyTo: replyTo,
+          headers: listUnsubscribeHeaders
+        })
+
+        // Log the send
+        await supabase.from('send_log').insert({
+          enrollment_id: item.enrollment_id,
+          contact_id:    item.contact_id,
+          sender_id:     sender.id,
+          step:          item.step,
+          subject:       subject,
+          status:        'sent'
+        })
+
+        // Increment sender's daily count
+        await supabase
+          .from('senders')
+          .update({ sends_today: sender.sends_today + 1 })
+          .eq('id', sender.id)
+
+        // Advance enrollment to next step (or complete)
+        await advanceEnrollment(item.enrollment_id, item.sequence_id, item.step)
+
+        results.sent.push({ email: item.email, step: item.step, campaign: item.campaign, sender: sender.email })
+        console.log(`✅ Sent step ${item.step} (${item.campaign}) to ${item.email} via ${sender.email}`)
+
+        // Throttle — 3s between sends to avoid SMTP rate limits
+        await new Promise(r => setTimeout(r, 3000))
+
+      } catch (sendErr) {
+        console.error(`❌ Failed: ${item.email}`, sendErr.message)
+
+        // Log failure
+        await supabase.from('send_log').insert({
+          enrollment_id: item.enrollment_id,
+          contact_id:    item.contact_id,
+          step:          item.step,
+          status:        'failed',
+          error_message: sendErr.message
+        })
+
+        results.failed.push({ email: item.email, error: sendErr.message })
+      }
+    }
+
+    return res.status(200).json({
+      message: `Done. ${results.sent.length} sent, ${results.failed.length} failed.`,
+      results
+    })
+
+  } catch (err) {
+    console.error('Handler error:', err)
+    return res.status(500).json({ error: err.message })
+  }
+}

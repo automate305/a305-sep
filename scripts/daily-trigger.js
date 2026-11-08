@@ -4,13 +4,39 @@
 //   node scripts/daily-trigger.js
 //
 // What it does:
-//   1. Resets sender daily counts in Supabase
-//   2. Calls /api/send to process today's queue
-//   3. Prints a summary to your terminal
+//   1. Verifies active SMTP accounts without sending
+//   2. Resets sender daily counts in Supabase
+//   3. Calls /api/send to process today's queue
+//   4. Prints a summary to your terminal
 // ============================================================
 
 const WEBHOOK_URL    = process.env.WEBHOOK_URL    // your Vercel URL, e.g. https://a305-sep.vercel.app
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET // shared secret
+
+async function checkSendingReadiness() {
+  const response = await fetch(`${WEBHOOK_URL}/api/readiness`, {
+    method: 'GET',
+    headers: {
+      'x-a305-secret': WEBHOOK_SECRET
+    }
+  })
+
+  const readiness = await response.json()
+
+  if (!response.ok || !readiness.ready) {
+    console.error('❌ Sending readiness check failed')
+
+    readiness.senders?.forEach(sender => {
+      const senderStatus = sender.error?.code ||
+        (sender.warmed ? 'NOT_READY' : 'WARMUP_INCOMPLETE')
+      console.error(`   ${sender.email}: ${senderStatus}`)
+    })
+
+    throw new Error('SMTP readiness must pass before the daily send can run')
+  }
+
+  console.log(`✅ SMTP ready: ${readiness.summary.authenticated}/${readiness.summary.total} active senders`)
+}
 
 async function resetDailySends() {
   const { createClient } = await import('@supabase/supabase-js')
@@ -27,35 +53,8 @@ async function triggerSend() {
     weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
   })}\n`)
 
+  await checkSendingReadiness()
   await resetDailySends()
-
-  // Ingest replies before sending (pauses sequences on reply, suppresses bounces)
-  console.log('📥 Ingesting replies...')
-  const ingestRes = await fetch(`${WEBHOOK_URL}/api/ingest-replies`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-a305-secret': WEBHOOK_SECRET },
-    body: JSON.stringify({})
-  })
-  if (ingestRes.ok) {
-    const ingestData = await ingestRes.json()
-    console.log(`   ${ingestData.total_ingested || 0} messages ingested\n`)
-  } else {
-    console.log('   ⚠️  Reply ingestion failed, continuing with send\n')
-  }
-
-  // Compute health scores
-  console.log('📊 Computing health scores...')
-  const scoreRes = await fetch(`${WEBHOOK_URL}/api/compute-scores`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-a305-secret': WEBHOOK_SECRET },
-    body: JSON.stringify({})
-  })
-  if (scoreRes.ok) {
-    const scoreData = await scoreRes.json()
-    console.log(`   ${scoreData.scores?.length || 0} scores computed\n`)
-  } else {
-    console.log('   ⚠️  Score computation failed, continuing with send\n')
-  }
 
   console.log('📤 Triggering send webhook...\n')
 

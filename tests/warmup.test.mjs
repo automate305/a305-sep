@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { activeWarmupDay, warmupMessage } from "../lib/services/warmup.ts";
+import { activeWarmupDay, describeSendError, warmupMessage } from "../lib/services/warmup.ts";
 
 // Real send_log history for matt@/tamiko@aestheticdevicepro.com, captured
 // 30 Sep 2026. Active days: Sep 1,2,3,5,6,7,10,23,24 — 9 distinct days,
@@ -251,4 +251,19 @@ test("the cron never starts a warmup for either provider", async () => {
   const route = await readFile(new URL("../pages/api/cron/daily-warmup.js", import.meta.url), "utf8");
 
   assert.doesNotMatch(route, /startGoogleWorkspaceWarmup|startGoogleWarmup/);
+});
+
+// ── Send error text ──────────────────────────────────────────────────────────
+test("a send failure names its code and command, not just the bare message", () => {
+  const timeout = Object.assign(new Error("Timeout"), { code: "ETIMEDOUT", command: "CONN" });
+
+  assert.equal(describeSendError(timeout), "Timeout: ETIMEDOUT during CONN");
+  assert.equal(describeSendError(new Error("boom")), "boom");
+  assert.equal(describeSendError("not an error object"), "SMTP send failed");
+});
+
+test("a failed send tells the operator to check Sent before retrying", async () => {
+  const source = await readFile(new URL("../lib/services/warmup.ts", import.meta.url), "utf8");
+
+  assert.match(source, /Check the mailbox's Sent folder before retrying/);
 });

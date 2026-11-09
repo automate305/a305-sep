@@ -52,6 +52,13 @@ function recipients() {
     .filter((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
 }
 
+export function describeSendError(error: unknown) {
+  if (!(error instanceof Error)) return "SMTP send failed";
+  const { code, command } = error as Error & { code?: string; command?: string };
+  const detail = [code, command].filter(Boolean).join(" during ");
+  return detail ? `${error.message}: ${detail}` : error.message;
+}
+
 function dailyCap(day: number) {
   if (day <= 3) return 2;
   if (day <= 7) return 2;
@@ -218,7 +225,7 @@ export async function runWarmup(): Promise<WarmupResult> {
         if (logError) throw logError;
         sent += 1;
       } catch (sendError) {
-        return { message: `Warmup stopped after ${sent} send${sent === 1 ? "" : "s"}: ${sendError instanceof Error ? sendError.message : "SMTP send failed"}`, ok: false, progress, sent };
+        return { message: `Warmup stopped after ${sent} send${sent === 1 ? "" : "s"} (${describeSendError(sendError)}). Check the mailbox's Sent folder before retrying.`, ok: false, progress, sent };
       }
     }
     await supabase.from("senders").update({ daily_limit: cap, sends_today: cap - remaining + remaining }).eq("id", sender.id);

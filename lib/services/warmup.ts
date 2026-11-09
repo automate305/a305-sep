@@ -58,6 +58,46 @@ function dailyCap(day: number) {
   return 4;
 }
 
+// The warmup message is internal mail to the operator's own seed inboxes.
+// Identical subject and body on every send is the plainest repetition signal a
+// receiving filter sees, so each send takes one of several short wordings.
+//
+// Copy rules hold for every variant: the subject is lowercase and three or four
+// words, the body is sentence case with no em dashes, no links, and the message
+// is signed with the sending mailbox's own name (Matt or Tamiko, never anyone
+// else). Variants are picked by an integer, not at random, so consecutive sends
+// never repeat a subject or a body and the choice is testable.
+const WARMUP_SUBJECTS = [
+  "mailbox setup check",
+  "quick delivery check",
+  "checking mailbox delivery",
+  "new mailbox test",
+  "confirming mail delivery",
+  "mailbox delivery test",
+  "quick mailbox setup check",
+] as const;
+
+const WARMUP_GREETINGS = ["Hi,", "Hello,", "Hey,"] as const;
+
+const WARMUP_BODIES = [
+  "I’m confirming a new mailbox is delivering normally. No action is needed unless you’d like to reply.",
+  "This is a quick check that mail from this new address is arriving as expected. Feel free to reply if it reached you.",
+  "I’m testing delivery from a newly set up mailbox. If this reached you, a short reply is welcome. Otherwise no action is needed.",
+  "Just making sure messages from this new mailbox are getting through. A quick reply is welcome if you see this.",
+  "I’m checking that this mailbox is set up correctly and mail is landing where it should. Nothing is needed from you.",
+] as const;
+
+const WARMUP_CLOSINGS = ["Thanks,", "Thank you,", "Best regards,", "Best,"] as const;
+
+export function warmupMessage(senderName: string, variant: number): { subject: string; text: string } {
+  const index = Math.abs(Math.trunc(variant));
+  const subject = WARMUP_SUBJECTS[index % WARMUP_SUBJECTS.length];
+  const greeting = WARMUP_GREETINGS[index % WARMUP_GREETINGS.length];
+  const body = WARMUP_BODIES[index % WARMUP_BODIES.length];
+  const closing = WARMUP_CLOSINGS[(index + 1) % WARMUP_CLOSINGS.length];
+  return { subject, text: `${greeting}\n\n${body}\n\n${closing}\n${senderName}` };
+}
+
 // Day N of warmup means "the Nth distinct calendar day this mailbox has
 // actually sent on" — not calendar time since warmup_started_at. A mailbox
 // silent for two weeks mid-ramp does not arrive back at a high cap just
@@ -144,11 +184,16 @@ export async function runHostingerWarmup(): Promise<WarmupResult> {
       const recipient = seedRecipients[(day + senderIndex + (count || 0) + offset - 1) % seedRecipients.length];
       try {
         const transporter = createSmtpTransporter(sender);
+        // Consecutive sends in a run differ by one, so subject and body never
+        // repeat back to back; the day and sender offsets keep a mailbox from
+        // sending the same wording on consecutive days.
+        const variant = Math.floor(Date.now() / 86_400_000) * 11 + senderIndex * 5 + (count || 0) + offset;
+        const message = warmupMessage(sender.name, variant);
         await transporter.sendMail({
           from: `"${sender.name}" <${sender.email}>`,
           to: recipient,
-          subject: "Quick mailbox setup check",
-          text: `Hi,\n\nI’m confirming a new mailbox is delivering normally. No action is needed unless you’d like to reply.\n\nThanks,\n${sender.name}`,
+          subject: message.subject,
+          text: message.text,
         });
         transporter.close();
         const { error: logError } = await supabase.from("send_log").insert({ sender_id: sender.id, status: "warmup", step: 0, subject: "Internal mailbox setup check" });

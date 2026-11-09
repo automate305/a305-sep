@@ -413,15 +413,16 @@ function getSendMode(sender: RawSender): DashboardSender["sendMode"] {
 }
 
 function getWarmupDetails(startedAt: string | null | undefined, warmed: boolean) {
-  if (!startedAt) return { projectedGraduation: null, warmupDay: warmed ? 21 : null };
+  const totalDays = 28;
+  if (!startedAt) return { projectedGraduation: null, warmupDay: warmed ? totalDays : null };
   const startDate = new Date(startedAt);
   const elapsedMilliseconds = Math.max(Date.now() - startDate.getTime(), 0);
-  const warmupDay = Math.min(Math.floor(elapsedMilliseconds / 86_400_000) + 1, 21);
+  const warmupDay = Math.min(Math.floor(elapsedMilliseconds / 86_400_000) + 1, totalDays);
   const graduationDate = new Date(startDate);
-  graduationDate.setUTCDate(graduationDate.getUTCDate() + 21);
+  graduationDate.setUTCDate(graduationDate.getUTCDate() + totalDays);
   return {
     projectedGraduation: graduationDate.toISOString(),
-    warmupDay: warmed ? Math.max(warmupDay, 21) : warmupDay,
+    warmupDay: warmed ? Math.max(warmupDay, totalDays) : warmupDay,
   };
 }
 

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { lockDashboard, reviewHeldMessage, runDomainAuthenticationCheck, runSmtpReadinessCheck, runWarmup, startWarmup, type DomainAuthenticationResult, type DomainCheckEntry, type SmtpReadinessResult, type WarmupResult } from "@/app/actions";
+import { lockDashboard, reviewHeldMessage, runDomainAuthenticationCheck, runSmtpReadinessCheck, runWarmup, startGoogleWarmup, startWarmup, type DomainAuthenticationResult, type DomainCheckEntry, type SmtpReadinessResult, type WarmupResult } from "@/app/actions";
 import { ContactEnrollmentPanel } from "@/components/dashboard/contact-enrollment-panel";
 import { ContactsPagePanel } from "@/components/dashboard/contacts-page-panel";
 import { SequenceBuilderPanel } from "@/components/dashboard/sequence-builder-panel";
@@ -233,6 +233,14 @@ export function OutreachDashboard({
     });
   }
 
+  function handleStartGoogleWarmup() {
+    startReviewTransition(async () => {
+      const result = await startGoogleWarmup();
+      setWarmupResult(result);
+      if (result.ok) router.refresh();
+    });
+  }
+
   function handleRunWarmup() {
     startReviewTransition(async () => {
       const result = await runWarmup();
@@ -356,9 +364,9 @@ export function OutreachDashboard({
 
           {view === "infrastructure" && <div className="side-by-side">
             <section className="panel warmup-panel">
-              <div className="panel-heading"><div><p className="section-kicker">SAFE RAMP</p><h2>Warmup board</h2></div><div className="readiness-actions"><button className="secondary-action" disabled={isReviewPending} onClick={handleStartWarmup} type="button">Start 21-day warmup</button><button className="secondary-action" disabled={isReviewPending} onClick={handleRunWarmup} type="button">Send today&apos;s seed mail</button></div></div>
+              <div className="panel-heading"><div><p className="section-kicker">SAFE RAMP</p><h2>Warmup board</h2></div><div className="readiness-actions"><button className="secondary-action" disabled={isReviewPending} onClick={handleStartWarmup} type="button">Start Hostinger warmup</button><button className="secondary-action" disabled={isReviewPending} onClick={handleStartGoogleWarmup} type="button">Start hello &amp; info warmup</button><button className="secondary-action" disabled={isReviewPending} onClick={handleRunWarmup} type="button">Send today&apos;s seed mail</button></div></div>
               <div className="warmup-list">
-                {warmingSenders.map((sender) => <article key={sender.email}><div><strong>{sender.email}</strong><span>{sender.warmupDay ? `Day ${sender.warmupDay} of 21` : "Start date needed"} · Cap {sender.dailyLimit}/day · Seed only</span></div><div className="warmup-progress"><span style={{ width: `${((sender.warmupDay || 0) / 21) * 100}%` }} /></div><small>{sender.projectedGraduation ? `Est. ${formatShortDate(sender.projectedGraduation)}` : "Set warmup date"}</small></article>)}
+                {warmingSenders.map((sender) => <article key={sender.email}><div><strong>{sender.email}</strong><span>{sender.warmupDay ? `Day ${sender.warmupDay} of 28` : "Start date needed"} · Cap {sender.dailyLimit}/day · Seed only</span></div><div className="warmup-progress"><span style={{ width: `${((sender.warmupDay || 0) / 28) * 100}%` }} /></div><small>{sender.projectedGraduation ? `Est. ${formatShortDate(sender.projectedGraduation)}` : "Set warmup date"}</small></article>)}
                 {warmingSenders.length === 0 ? <EmptyState title="No mailboxes warming" copy="Warmed senders remain visible in mailbox health." /> : null}
               </div>
               {warmupResult ? <div className={`readiness-result ${warmupResult.ok ? "ready" : "not-ready"}`}><strong>{warmupResult.message}</strong></div> : null}

@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 
 import { isUsableEnvironmentValue } from "@/lib/services/smtp.js";
+import { activeWarmupDay, warmupProgress } from "@/lib/services/warmup";
 
 export type DashboardBrandMetrics = {
   active: number;
@@ -295,6 +296,7 @@ type RawSender = {
   email: string;
   health_score?: number | null;
   host?: string | null;
+  id: string;
   inbox_placement_score?: number | null;
   name: string;
   postmaster_score?: number | null;
@@ -410,20 +412,6 @@ function getSendMode(sender: RawSender): DashboardSender["sendMode"] {
   if (sender.active && sender.warmed) return "live";
   if (!sender.warmed) return "seed-only";
   return "paused";
-}
-
-function getWarmupDetails(startedAt: string | null | undefined, warmed: boolean) {
-  const totalDays = 28;
-  if (!startedAt) return { projectedGraduation: null, warmupDay: warmed ? totalDays : null };
-  const startDate = new Date(startedAt);
-  const elapsedMilliseconds = Math.max(Date.now() - startDate.getTime(), 0);
-  const warmupDay = Math.min(Math.floor(elapsedMilliseconds / 86_400_000) + 1, totalDays);
-  const graduationDate = new Date(startDate);
-  graduationDate.setUTCDate(graduationDate.getUTCDate() + totalDays);
-  return {
-    projectedGraduation: graduationDate.toISOString(),
-    warmupDay: warmed ? Math.max(warmupDay, totalDays) : warmupDay,
-  };
 }
 
 function getDayAndMonthStarts(now: Date) {
@@ -622,8 +610,17 @@ export async function getDashboardData(): Promise<DashboardData> {
       };
     });
 
+    const activeDays = new Map<string, number>();
+    await Promise.all(senderRows.filter((sender) => !sender.warmed && sender.warmup_started_at).map(async (sender) => {
+      try {
+        activeDays.set(sender.id, await activeWarmupDay(supabase, sender.id, now));
+      } catch {
+        // The board shows "Day unavailable" rather than a guessed number.
+      }
+    }));
+
     const senders: DashboardSender[] = senderRows.map((sender) => {
-      const warmup = getWarmupDetails(sender.warmup_started_at, sender.warmed);
+      const warmup = warmupProgress(activeDays.get(sender.id) ?? null, sender.warmed, sender.warmup_started_at, now);
       return {
         active: sender.active,
         campaign: sender.campaign || "general",

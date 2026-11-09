@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { activeWarmupDay, describeSendError, warmupMessage } from "../lib/services/warmup.ts";
+import { TOTAL_WARMUP_DAYS, activeWarmupDay, describeSendError, warmupMessage, warmupProgress } from "../lib/services/warmup.ts";
 
 // Real send_log history for matt@/tamiko@aestheticdevicepro.com, captured
 // 30 Sep 2026. Active days: Sep 1,2,3,5,6,7,10,23,24 — 9 distinct days,
@@ -266,4 +266,36 @@ test("a failed send tells the operator to check Sent before retrying", async () 
   const source = await readFile(new URL("../lib/services/warmup.ts", import.meta.url), "utf8");
 
   assert.match(source, /Check the mailbox's Sent folder before retrying/);
+});
+
+// ── Board progress ───────────────────────────────────────────────────────────
+const NOW = new Date("2026-11-09T22:00:00Z");
+
+test("the board shows the real sending day, not calendar time since the start date", () => {
+  // matt@/tamiko@: started 7 Sep, 14 real sending days. Calendar math would say 28.
+  const progress = warmupProgress(14, false, "2026-09-07T18:24:39.121Z", NOW);
+
+  assert.equal(progress.warmupDay, 14);
+  assert.equal(progress.projectedGraduation, "2026-11-23T22:00:00.000Z");
+});
+
+test("the estimated graduation is today plus the sending days still needed", () => {
+  assert.equal(warmupProgress(1, false, "2026-11-09T20:52:53Z", NOW).projectedGraduation, "2026-12-06T22:00:00.000Z");
+  assert.equal(warmupProgress(TOTAL_WARMUP_DAYS, false, "2026-09-07T00:00:00Z", NOW).projectedGraduation, "2026-11-09T22:00:00.000Z");
+});
+
+test("a warmed sender shows the full ramp and no estimate", () => {
+  assert.deepEqual(warmupProgress(null, true, null, NOW), { projectedGraduation: null, warmupDay: TOTAL_WARMUP_DAYS });
+});
+
+test("an unstarted sender, or one whose day could not be read, shows no invented number", () => {
+  assert.deepEqual(warmupProgress(null, false, null, NOW), { projectedGraduation: null, warmupDay: null });
+  assert.deepEqual(warmupProgress(null, false, "2026-09-07T18:24:39Z", NOW), { projectedGraduation: null, warmupDay: null });
+});
+
+test("the dashboard uses activeWarmupDay and no longer does calendar warmup math", async () => {
+  const source = await readFile(new URL("../lib/services/dashboard.ts", import.meta.url), "utf8");
+
+  assert.match(source, /activeWarmupDay\(supabase, sender\.id/);
+  assert.doesNotMatch(source, /86_400_000/);
 });

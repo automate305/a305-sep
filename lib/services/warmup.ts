@@ -30,7 +30,23 @@ export type WarmupResult = {
   sent: number;
 };
 
-const TOTAL_WARMUP_DAYS = 28;
+export const TOTAL_WARMUP_DAYS = 28;
+
+// What the board shows. The day is the real sending-day count from
+// activeWarmupDay, never calendar time since warmup_started_at, and the
+// graduation date is an estimate that assumes one sending day per calendar day.
+export function warmupProgress(
+  activeDay: number | null,
+  warmed: boolean,
+  startedAt: string | null | undefined,
+  now: Date = new Date(),
+): { projectedGraduation: string | null; warmupDay: number | null } {
+  if (warmed) return { projectedGraduation: null, warmupDay: TOTAL_WARMUP_DAYS };
+  if (!startedAt || activeDay === null) return { projectedGraduation: null, warmupDay: null };
+  const graduation = new Date(now);
+  graduation.setUTCDate(graduation.getUTCDate() + Math.max(TOTAL_WARMUP_DAYS - activeDay, 0));
+  return { projectedGraduation: graduation.toISOString(), warmupDay: activeDay };
+}
 
 // "YYYY-MM-DD" in America/New_York, the calendar day a send counts toward.
 function easternDateKey(date: Date) {

@@ -2,7 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 
 import { createSmtpTransporter, isUsableEnvironmentValue, verifySmtpSender } from "./smtp.js";
 
-const WARMUP_SENDER_EMAILS = ["matt@aestheticdevicepro.com", "tamiko@aestheticdevicepro.com"];
+// No longer hardcoded — warmable senders are discovered from the DB:
+// active=true, warmed=false, warmup_started_at IS NOT NULL.
 
 type WarmupSender = {
   active: boolean;
@@ -29,7 +30,7 @@ export type WarmupResult = {
   sent: number;
 };
 
-const TOTAL_WARMUP_DAYS = 21;
+const TOTAL_WARMUP_DAYS = 28;
 
 // "YYYY-MM-DD" in America/New_York, the calendar day a send counts toward.
 function easternDateKey(date: Date) {
@@ -134,37 +135,50 @@ function client() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
-async function hostingerSenders() {
+async function warmableSenders() {
   const supabase = client();
   if (!supabase) return { error: "Supabase is not configured.", senders: [] as WarmupSender[], supabase: null };
   const { data, error } = await supabase.from("senders").select("id,email,name,host,port,daily_limit,warmed,active,warmup_started_at")
-    .in("email", WARMUP_SENDER_EMAILS).order("email");
+    .eq("active", true).eq("warmed", false).not("warmup_started_at", "is", null).order("email");
   return { error: error?.message || null, senders: (data || []) as WarmupSender[], supabase };
 }
 
-export async function startHostingerWarmup(): Promise<WarmupResult> {
+export async function startWarmup(senderEmails: string[]): Promise<WarmupResult> {
+  if (senderEmails.length === 0) return { message: "Provide at least one sender email to start warmup.", ok: false, sent: 0 };
   if (recipients().length < 4) return { message: "Add four seed inboxes to WARMUP_SEED_RECIPIENTS before starting.", ok: false, sent: 0 };
-  const { error, senders, supabase } = await hostingerSenders();
-  if (error || !supabase) return { message: error || "Supabase is not configured.", ok: false, sent: 0 };
-  if (senders.length !== WARMUP_SENDER_EMAILS.length) return { message: "Matt and Tamiko must both exist as Hostinger senders.", ok: false, sent: 0 };
+  const supabase = client();
+  if (!supabase) return { message: "Supabase is not configured.", ok: false, sent: 0 };
+  const { data, error } = await supabase.from("senders").select("id,email,name,host,port,daily_limit,warmed,active,warmup_started_at")
+    .in("email", senderEmails).eq("warmed", false).order("email");
+  if (error) return { message: error.message, ok: false, sent: 0 };
+  const senders = (data || []) as WarmupSender[];
+  if (senders.length !== senderEmails.length) {
+    const found = senders.map((s) => s.email);
+    const missing = senderEmails.filter((e) => !found.includes(e));
+    return { message: `These senders are missing or already warmed: ${missing.join(", ")}`, ok: false, sent: 0 };
+  }
   try {
     await Promise.all(senders.map((sender) => verifySmtpSender(sender)));
   } catch {
     return { message: "SMTP authentication failed. No warmup was started and no email was sent.", ok: false, sent: 0 };
   }
   const { error: updateError } = await supabase.from("senders").update({ active: true, daily_limit: 2, warmup_started_at: new Date().toISOString() })
-    .in("email", WARMUP_SENDER_EMAILS).eq("warmed", false);
+    .in("email", senderEmails).eq("warmed", false);
   if (updateError) return { message: `Unable to start warmup: ${updateError.message}`, ok: false, sent: 0 };
-  return { message: "21-day warmup started. No email has been sent yet.", ok: true, sent: 0 };
+  return { message: `${TOTAL_WARMUP_DAYS}-day warmup started for ${senderEmails.length} sender${senderEmails.length === 1 ? "" : "s"}. No email has been sent yet.`, ok: true, sent: 0 };
 }
 
-export async function runHostingerWarmup(): Promise<WarmupResult> {
+export async function startHostingerWarmup(): Promise<WarmupResult> {
+  return startWarmup(["matt@aestheticdevicepro.com", "tamiko@aestheticdevicepro.com"]);
+}
+
+export async function runWarmup(): Promise<WarmupResult> {
   const seedRecipients = recipients();
   if (seedRecipients.length < 4) return { message: "Four seed inboxes are required. No email was sent.", ok: false, sent: 0 };
-  const { error, senders, supabase } = await hostingerSenders();
+  const { error, senders, supabase } = await warmableSenders();
   if (error || !supabase) return { message: error || "Supabase is not configured.", ok: false, sent: 0 };
-  const activeSenders = senders.filter((sender) => sender.active && !sender.warmed && sender.warmup_started_at);
-  if (activeSenders.length !== WARMUP_SENDER_EMAILS.length) return { message: "Start Matt and Tamiko's warmup first. No email was sent.", ok: false, sent: 0 };
+  if (senders.length === 0) return { message: "No senders are in warmup. Start a warmup first. No email was sent.", ok: false, sent: 0 };
+  const activeSenders = senders;
 
   let sent = 0;
   const progress: WarmupSenderProgress[] = [];
@@ -204,10 +218,11 @@ export async function runHostingerWarmup(): Promise<WarmupResult> {
       }
     }
     await supabase.from("senders").update({ daily_limit: cap, sends_today: cap - remaining + remaining }).eq("id", sender.id);
-    // Reaching day 21 only means the ramp is complete, never that `warmed`
-    // gets flipped here — graduating a mailbox to real sends is a deliberate
-    // operator action, not a side effect of this running on schedule.
     progress.push({ activeDay: day, email: sender.email, readyToGraduate: day >= TOTAL_WARMUP_DAYS });
   }
   return { message: sent ? `${sent} internal warmup message${sent === 1 ? "" : "s"} sent. No prospects or sequences were used.` : "Today's warmup cap was already reached. No email was sent.", ok: true, progress, sent };
+}
+
+export async function runHostingerWarmup(): Promise<WarmupResult> {
+  return runWarmup();
 }

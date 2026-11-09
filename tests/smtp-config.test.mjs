@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  SEND_SOCKET_TIMEOUT_MS,
+  VERIFY_SOCKET_TIMEOUT_MS,
   createSmtpTransporter,
   getSmtpPasswordEnvironmentVariable,
   getSmtpTransportSettings,
@@ -128,4 +130,26 @@ test("an alias with no usable credential anywhere is still refused", () => {
     () => createSmtpTransporter({ ...baseSender, email: "hello@automate305.com" }, {}),
     (error) => error.code === "SMTP_CREDENTIAL_MISSING",
   );
+});
+
+// ── Timeouts ─────────────────────────────────────────────────────────────────
+test("sending connections wait longer than the login check", () => {
+  const sender = { ...baseSender, email: "hello@automate305.com", host: "smtp.gmail.com" };
+  const sending = createSmtpTransporter(sender, aliasEnvironment);
+  const checking = createSmtpTransporter(sender, aliasEnvironment, { socketTimeout: VERIFY_SOCKET_TIMEOUT_MS });
+  try {
+    assert.equal(sending.options.socketTimeout, SEND_SOCKET_TIMEOUT_MS);
+    assert.equal(checking.options.socketTimeout, VERIFY_SOCKET_TIMEOUT_MS);
+    assert.ok(SEND_SOCKET_TIMEOUT_MS > VERIFY_SOCKET_TIMEOUT_MS);
+  } finally {
+    sending.close();
+    checking.close();
+  }
+});
+
+test("the login check keeps its short timeout", async () => {
+  const source = await readFile(new URL("../lib/services/smtp.js", import.meta.url), "utf8");
+  const verify = source.slice(source.indexOf("export async function verifySmtpSender"));
+
+  assert.match(verify, /socketTimeout: VERIFY_SOCKET_TIMEOUT_MS/);
 });

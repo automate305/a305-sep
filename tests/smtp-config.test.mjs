@@ -3,9 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  createSmtpTransporter,
   getSmtpPasswordEnvironmentVariable,
   getSmtpTransportSettings,
   isUsableEnvironmentValue,
+  resolveSmtpPassword,
   senderHasCapacity,
 } from "../lib/services/smtp.js";
 import { describeSenderState } from "../lib/services/sender-gate.js";
@@ -83,4 +85,47 @@ test("runs no-send readiness before the Cowork daily send", async () => {
   assert.match(sendRoute, /createSenderGate\(\)/);
   assert.match(sendRoute, /gate\.selectSender\(/);
   assert.doesNotMatch(sendRoute, /\.limit\(1\)/);
+});
+
+// ── Alias login ──────────────────────────────────────────────────────────────
+const aliasEnvironment = { SMTP_PASS_CAM: "app-password-for-cam-0000" };
+
+test("an alias with no password of its own logs in as the primary account", () => {
+  for (const alias of ["hello@automate305.com", "info@automate305.com"]) {
+    const resolved = resolveSmtpPassword(alias, aliasEnvironment);
+    assert.equal(resolved.user, "cam@automate305.com");
+    assert.equal(resolved.variable, "SMTP_PASS_CAM");
+    assert.equal(resolved.password, aliasEnvironment.SMTP_PASS_CAM);
+  }
+});
+
+test("cam@ and a mailbox with its own password log in as themselves", () => {
+  assert.equal(resolveSmtpPassword("cam@automate305.com", aliasEnvironment).user, "cam@automate305.com");
+  const own = resolveSmtpPassword("hello@automate305.com", { ...aliasEnvironment, SMTP_PASS_HELLO: "its-own-password-0000" });
+  assert.equal(own.user, "hello@automate305.com");
+  assert.equal(own.variable, "SMTP_PASS_HELLO");
+});
+
+test("Hostinger senders never fall back to the Google login", () => {
+  const resolved = resolveSmtpPassword("matt@aestheticdevicepro.com", aliasEnvironment);
+  assert.equal(resolved.password, undefined);
+  assert.equal(resolved.user, "matt@aestheticdevicepro.com");
+});
+
+test("the transporter logs in as the primary account while the sender keeps its own address", () => {
+  const sender = { ...baseSender, email: "info@automate305.com", host: "smtp.gmail.com" };
+  const transporter = createSmtpTransporter(sender, aliasEnvironment);
+  try {
+    assert.equal(transporter.options.auth.user, "cam@automate305.com");
+    assert.equal(sender.email, "info@automate305.com");
+  } finally {
+    transporter.close();
+  }
+});
+
+test("an alias with no usable credential anywhere is still refused", () => {
+  assert.throws(
+    () => createSmtpTransporter({ ...baseSender, email: "hello@automate305.com" }, {}),
+    (error) => error.code === "SMTP_CREDENTIAL_MISSING",
+  );
 });

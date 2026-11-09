@@ -229,3 +229,26 @@ test("the send path uses the varied wording and no longer hard-codes one message
   assert.doesNotMatch(source, /subject: "Quick mailbox setup check"/, "the single hard-coded subject must be gone");
   assert.match(source, /subject: "Internal mailbox setup check"/, "the send_log label is unchanged");
 });
+
+// ── Start-warmup safety ──────────────────────────────────────────────────────
+test("startWarmup only touches senders that have never started, so it cannot reset a running timer", async () => {
+  const source = await readFile(new URL("../lib/services/warmup.ts", import.meta.url), "utf8");
+  const start = source.slice(source.indexOf("export async function startWarmup"), source.indexOf("export async function startHostingerWarmup"));
+
+  assert.equal((start.match(/\.is\("warmup_started_at", null\)/g) || []).length, 2, "both the select and the update must require warmup_started_at IS NULL");
+});
+
+test("the Google Workspace warmup targets only hello@ and info@, never cam@ or the Hostinger senders", async () => {
+  const source = await readFile(new URL("../lib/services/warmup.ts", import.meta.url), "utf8");
+  const body = source.slice(source.indexOf("export async function startGoogleWorkspaceWarmup"), source.indexOf("export async function runWarmup"));
+
+  assert.match(body, /hello@automate305\.com/);
+  assert.match(body, /info@automate305\.com/);
+  assert.doesNotMatch(body, /cam@|aestheticdevicepro/);
+});
+
+test("the cron never starts a warmup for either provider", async () => {
+  const route = await readFile(new URL("../pages/api/cron/daily-warmup.js", import.meta.url), "utf8");
+
+  assert.doesNotMatch(route, /startGoogleWorkspaceWarmup|startGoogleWarmup/);
+});

@@ -149,13 +149,13 @@ export async function startWarmup(senderEmails: string[]): Promise<WarmupResult>
   const supabase = client();
   if (!supabase) return { message: "Supabase is not configured.", ok: false, sent: 0 };
   const { data, error } = await supabase.from("senders").select("id,email,name,host,port,daily_limit,warmed,active,warmup_started_at")
-    .in("email", senderEmails).eq("warmed", false).order("email");
+    .in("email", senderEmails).eq("warmed", false).is("warmup_started_at", null).order("email");
   if (error) return { message: error.message, ok: false, sent: 0 };
   const senders = (data || []) as WarmupSender[];
   if (senders.length !== senderEmails.length) {
     const found = senders.map((s) => s.email);
     const missing = senderEmails.filter((e) => !found.includes(e));
-    return { message: `These senders are missing or already warmed: ${missing.join(", ")}`, ok: false, sent: 0 };
+    return { message: `These senders are missing, already warmed, or already warming: ${missing.join(", ")}. Nothing was changed.`, ok: false, sent: 0 };
   }
   try {
     await Promise.all(senders.map((sender) => verifySmtpSender(sender)));
@@ -163,13 +163,17 @@ export async function startWarmup(senderEmails: string[]): Promise<WarmupResult>
     return { message: "SMTP authentication failed. No warmup was started and no email was sent.", ok: false, sent: 0 };
   }
   const { error: updateError } = await supabase.from("senders").update({ active: true, daily_limit: 2, warmup_started_at: new Date().toISOString() })
-    .in("email", senderEmails).eq("warmed", false);
+    .in("email", senderEmails).eq("warmed", false).is("warmup_started_at", null);
   if (updateError) return { message: `Unable to start warmup: ${updateError.message}`, ok: false, sent: 0 };
   return { message: `${TOTAL_WARMUP_DAYS}-day warmup started for ${senderEmails.length} sender${senderEmails.length === 1 ? "" : "s"}. No email has been sent yet.`, ok: true, sent: 0 };
 }
 
 export async function startHostingerWarmup(): Promise<WarmupResult> {
   return startWarmup(["matt@aestheticdevicepro.com", "tamiko@aestheticdevicepro.com"]);
+}
+
+export async function startGoogleWorkspaceWarmup(): Promise<WarmupResult> {
+  return startWarmup(["hello@automate305.com", "info@automate305.com"]);
 }
 
 export async function runWarmup(): Promise<WarmupResult> {

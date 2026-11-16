@@ -133,12 +133,6 @@ export type DashboardSender = {
 
 export type DashboardData = {
   activities: DashboardActivity[];
-  aiSpend: {
-    budget: number;
-    configured: boolean;
-    remaining: number;
-    spent: number;
-  };
   brandMetrics: Record<"aesthetic" | "all" | "hvac", DashboardBrandMetrics>;
   configured: boolean;
   contactCount: number;
@@ -314,16 +308,9 @@ function emptyBrandMetrics(): DashboardBrandMetrics {
   return { active: 0, bounced: 0, held: 0, queued: 0, replied: 0, sentToday: 0 };
 }
 
-function getAiBudget(): number {
-  const budget = Number(process.env.AI_MONTHLY_BUDGET_USD || 50);
-  return Number.isFinite(budget) && budget >= 0 ? budget : 50;
-}
-
 function createEmptyDashboardData(errorMessage: string | null): DashboardData {
-  const budget = getAiBudget();
   return {
     activities: [],
-    aiSpend: { budget, configured: false, remaining: budget, spent: 0 },
     brandMetrics: {
       aesthetic: emptyBrandMetrics(),
       all: emptyBrandMetrics(),
@@ -672,24 +659,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     const sentThisMonth = sentMonthResult.count || 0;
     const repliesThisMonth = repliedMonthResult.count || 0;
 
-    const aiBudget = getAiBudget();
-    const aiUsageResult = await supabase.from("ai_usage").select("cost_usd")
-      .gte("created_at", monthStart);
-    const aiSpendConfigured = aiUsageResult.error === null;
-    const aiSpent = aiSpendConfigured
-      ? (aiUsageResult.data || []).reduce(
-          (total, usage) => total + numberValue(usage.cost_usd as number | string | null), 0,
-        )
-      : 0;
-
     return {
       activities,
-      aiSpend: {
-        budget: aiBudget,
-        configured: aiSpendConfigured,
-        remaining: Math.max(aiBudget - aiSpent, 0),
-        spent: aiSpent,
-      },
       brandMetrics,
       configured: true,
       contactCount: contactCountResult.count || 0,

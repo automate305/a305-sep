@@ -86,10 +86,6 @@ function formatShortDate(value: string | null): string {
   }).format(new Date(value));
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", { currency: "USD", style: "currency" }).format(value);
-}
-
 function BrandBadge({ campaign }: { campaign: string }) {
   return <span className={`brand-badge ${campaign}`}>{campaign === "hvac" ? "A305" : campaign === "aesthetic" ? "ADP" : "GEN"}</span>;
 }
@@ -176,9 +172,6 @@ export function OutreachDashboard({
     .filter((sender) => sender.healthScore !== null)
     .toSorted((left, right) => (right.healthScore || 0) - (left.healthScore || 0))[0];
   const selectedMetrics = dashboardData.brandMetrics[activeBrand];
-  const aiBudgetPercent = dashboardData.aiSpend.budget > 0
-    ? Math.min((dashboardData.aiSpend.spent / dashboardData.aiSpend.budget) * 100, 100)
-    : 0;
 
   useEffect(() => {
     if (!selectedQueueItem && !isReplyPanelOpen) return;
@@ -370,14 +363,6 @@ export function OutreachDashboard({
                 {warmingSenders.length === 0 ? <EmptyState title="No mailboxes warming" copy="Warmed senders remain visible in mailbox health." /> : null}
               </div>
               {warmupResult ? <div className={`readiness-result ${warmupResult.ok ? "ready" : "not-ready"}`}><strong>{warmupResult.message}</strong></div> : null}
-            </section>
-
-            <section className="panel spend-panel">
-              <div className="panel-heading"><div><p className="section-kicker">MONTH TO DATE</p><h2>AI spend</h2></div><span>{Math.round(aiBudgetPercent)}%</span></div>
-              <div className="spend-amount"><strong>{formatCurrency(dashboardData.aiSpend.spent)}</strong><span>of {formatCurrency(dashboardData.aiSpend.budget)} budget</span></div>
-              <div className="spend-bar"><span style={{ width: `${aiBudgetPercent}%` }} /></div>
-              <div className="spend-footer"><span>Remaining</span><strong>{formatCurrency(dashboardData.aiSpend.remaining)}</strong></div>
-              {!dashboardData.aiSpend.configured ? <p className="data-note">AI ledger not installed yet; displayed spend is $0, not an estimate.</p> : null}
             </section>
           </div>}
 

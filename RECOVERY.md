@@ -220,8 +220,7 @@ It was merged into this branch deliberately, not wholesale:
   branch**, because it is not production and it broke the verification: root
   `api/*.js` (Vercel would build them as extra functions and change the route
   manifest), `public/dashboard.html`, `lib/*.js` and `tests/gate-logic.test.js`
-  (7 lint errors), and `mintiq/` (its `express` import fails the Next type
-  check). None of it is lost: it is all on `main` at `04321cd`, which is where
+  (7 lint errors). None of it is lost: it is all on `main` at `04321cd`, which is where
   Phases 2–4 lift `lib/dns-gate.js`, `lib/warmup.js` and `lib/suppression.js`
   from.
 - `supabase/schema.sql` is now the snapshot's own copy (7 tables, the
@@ -239,7 +238,7 @@ It was merged into this branch deliberately, not wholesale:
 | `npm run typecheck` | clean ✔ |
 | `npm test` | 18 pass, 0 fail (the snapshot's own `tests/*.test.mjs`) ✔ |
 | `schema.production.sql` on scratch PostgreSQL 16 | applied twice, clean then idempotent; per-table column signatures for all 8 tables **identical** to live `qpwqqrdxnnvztnuavyvg` ✔ |
-| snapshot `schema.sql` on scratch PostgreSQL 16 | 7 tables; 6 signatures identical to live, `enrollments` identical columns in a different order; no `mintiq_memos` (belongs to the MintIQ app); grants fail on plain Postgres because `anon`/`authenticated` roles only exist on Supabase — expected |
+| snapshot `schema.sql` on scratch PostgreSQL 16 | 7 tables; 6 signatures identical to live, `enrollments` identical columns in a different order; grants fail on plain Postgres because `anon`/`authenticated` roles only exist on Supabase — expected |
 | Build id | not compared: Next.js generates a fresh id per build, so `mC4Sbm0GAOCPU7IH-WFdl` cannot be reproduced from source. The route manifest is the comparable artefact. |
 | Production | untouched; still serves the lock screen. Nothing deployed from this branch. |
 

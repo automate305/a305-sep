@@ -446,20 +446,6 @@ create index if not exists send_log_sender_id_idx
 create index if not exists send_log_template_id_idx
   on send_log (template_id);
 
--- ── AI USAGE LEDGER ─────────────────────────────────────────
--- Every server-side AI call can append one row. No current workflow writes
--- demo spend; the dashboard shows $0 until actual usage is recorded.
-create table if not exists ai_usage (
-  id            uuid primary key default gen_random_uuid(),
-  provider      text not null,
-  model         text not null,
-  feature       text not null,
-  input_tokens  int not null default 0,
-  output_tokens int not null default 0,
-  cost_usd      numeric(12, 6) not null default 0,
-  created_at    timestamptz not null default now()
-);
-
 -- ── DAILY RESET FUNCTION ─────────────────────────────────────
 -- Call this via a Supabase cron job or your webhook at midnight
 create or replace function reset_daily_sends()
@@ -541,7 +527,6 @@ alter table enrollments enable row level security;
 alter table send_log    enable row level security;
 alter table templates   enable row level security;
 alter table sequences   enable row level security;
-alter table ai_usage    enable row level security;
 
 -- Service-role requests bypass RLS. Browser roles receive no table grants or
 -- permissive policies, so operational data and contact PII stay server-only.
@@ -551,16 +536,15 @@ drop policy if exists "service_role_all" on enrollments;
 drop policy if exists "service_role_all" on send_log;
 drop policy if exists "service_role_all" on templates;
 drop policy if exists "service_role_all" on sequences;
-drop policy if exists "service_role_all" on ai_usage;
 
 revoke all on table senders, contacts, enrollments, send_log, templates,
-  sequences, ai_usage from anon, authenticated;
+  sequences from anon, authenticated;
 revoke all on table todays_queue, available_senders, pipeline_summary
   from anon, authenticated;
 
 grant usage on schema public to service_role;
 grant select, insert, update, delete on table senders, contacts, enrollments,
-  send_log, templates, sequences, ai_usage to service_role;
+  send_log, templates, sequences to service_role;
 grant select on table todays_queue, available_senders, pipeline_summary
   to service_role;
 

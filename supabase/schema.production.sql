@@ -158,39 +158,6 @@ create index if not exists send_log_enrollment_id_idx on send_log (enrollment_id
 create index if not exists send_log_sender_id_idx     on send_log (sender_id);
 create index if not exists send_log_template_id_idx   on send_log (template_id);
 
-
--- ── AI USAGE ────────────────────────────────────────────────────────────────
-create table if not exists ai_usage (
-  id            uuid primary key default gen_random_uuid(),
-  provider      text not null,
-  model         text not null,
-  feature       text not null,
-  input_tokens  integer not null default 0,
-  output_tokens integer not null default 0,
-  cost_usd      numeric(12,6) not null default 0,
-  created_at    timestamptz not null default now()
-);
-
-
--- ── MINTIQ MEMOS ────────────────────────────────────────────────────────────
--- Belongs to the MintIQ side project, not to OUTBOX sending. Recorded here
--- only because it shares the schema.
-create table if not exists mintiq_memos (
-  id            uuid primary key default gen_random_uuid(),
-  token         text not null unique,
-  business_name text not null,
-  source        text not null check (source in ('ui','webhook','sample')),
-  intake        jsonb not null,
-  memo          jsonb not null,
-  stats         jsonb,
-  delivered_to  text,
-  created_at    timestamptz not null default now()
-);
-
-create index if not exists mintiq_memos_business_name_idx on mintiq_memos (lower(business_name));
-create index if not exists mintiq_memos_created_at_idx    on mintiq_memos (created_at desc);
-
-
 -- ── VIEWS ───────────────────────────────────────────────────────────────────
 -- All three are security_invoker, so they honour the caller's RLS rather than
 -- running as their owner. Keep it that way.
@@ -275,5 +242,3 @@ alter table sequences    enable row level security;
 alter table templates    enable row level security;
 alter table enrollments  enable row level security;
 alter table send_log     enable row level security;
-alter table ai_usage     enable row level security;
-alter table mintiq_memos enable row level security;

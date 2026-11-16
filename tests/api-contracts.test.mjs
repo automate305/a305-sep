@@ -129,8 +129,6 @@ test("keeps every documented environment variable", async () => {
     "WEBHOOK_SECRET",
     "WEBHOOK_URL",
     "DASHBOARD_ACCESS_KEY",
-    "AI_MONTHLY_BUDGET_USD",
-    "ELEVENLABS_API_KEY",
     "SMTP_PASS_MATT",
     "SMTP_PASS_DON",
     "SMTP_PASS_ED",

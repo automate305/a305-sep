@@ -153,3 +153,11 @@ test("the login check keeps its short timeout", async () => {
 
   assert.match(verify, /socketTimeout: VERIFY_SOCKET_TIMEOUT_MS/);
 });
+
+test("the dashboard no-send check resolves credentials the way sending does", async () => {
+  const source = await readFile(new URL("../app/actions.ts", import.meta.url), "utf8");
+  const check = source.slice(source.indexOf("export async function runSmtpReadinessCheck"), source.indexOf("export async function runDomainAuthenticationCheck"));
+
+  assert.match(check, /resolveSmtpPassword\(sender\.email\)/);
+  assert.doesNotMatch(check, /process\.env\[passwordName\]/, "it must not read the alias's own variable directly");
+});

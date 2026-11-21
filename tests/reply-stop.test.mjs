@@ -160,7 +160,7 @@ test("the reply cron is protected and the weekday send checks inboxes before mai
     "utf8",
   );
 
-  assert.ok(sendCron.indexOf("syncProspectReplies") < sendCron.indexOf("todays_queue"));
+  assert.ok(sendCron.indexOf("syncProspectReplies") < sendCron.indexOf("/api/send"));
   assert.match(migration, /e\.status in \('active', 'held', 'paused'\)/);
   assert.match(migration, /when 'reply' then 'replied'/);
   assert.match(migration, /terminal_status <> 'replied'/);

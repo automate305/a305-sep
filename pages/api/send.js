@@ -11,6 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 
+import { campaignBlockedBySurbl } from '../../lib/services/campaign-launch.js'
 import { createSenderGate } from '../../lib/services/sender-gate.js'
 import { createSmtpTransporter } from '../../lib/services/smtp.js'
 import { buildEmailFooter } from '../../lib/services/email-footer.js'
@@ -159,6 +160,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'Nothing in queue today', results })
     }
 
+    const { data: campaignSenders, error: senderError } = await supabase
+      .from('senders')
+      .select('campaign,email')
+    if (senderError) throw new Error('Unable to load sending domains. No email was sent.')
+
+    const campaignsInQueue = [...new Set(campaignQueue.map((item) => item.campaign).filter(Boolean))]
+    const blockedCampaignReasons = new Map()
+    for (const campaign of campaignsInQueue) {
+      const listing = await campaignBlockedBySurbl(campaign, campaignSenders)
+      if (listing.blocked) blockedCampaignReasons.set(campaign, listing.reason)
+    }
+
     const contactIds = [...new Set(campaignQueue.map((item) => item.contact_id).filter(Boolean))]
     if (contactIds.length === 0) throw new Error('Queue rows are missing contact ids. No email was sent.')
     const { data: contactFlags, error: flagError } = await supabase
@@ -178,6 +191,12 @@ export default async function handler(req, res) {
     for (const item of campaignQueue) {
 
       try {
+        const listingReason = blockedCampaignReasons.get(item.campaign)
+        if (listingReason) {
+          results.skipped.push({ email: item.email, reason: listingReason })
+          continue
+        }
+
         const flags = flagsById.get(item.contact_id)
         const blocked = flags?.bounced
           ? { reason: 'Contact is bounced', status: 'bounced' }

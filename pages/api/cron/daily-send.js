@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
+import { campaignAutomationEnabled, campaignBlockedBySurbl } from '../../../lib/services/campaign-launch.js'
+import { syncProspectReplies } from '../../../lib/services/reply-sync.js'
 import { isUsableEnvironmentValue } from '../../../lib/services/smtp.js'
-
-const automationEnabled = () => process.env.CAMPAIGN_AUTOMATION_ENABLED === 'true'
 
 function getRequestOrigin(req) {
   const host = req.headers['x-forwarded-host'] || req.headers.host
@@ -22,13 +22,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
-  if (!automationEnabled()) {
-    return res.status(200).json({
-      automation: 'disabled',
-      message: 'Daily sending is intentionally disabled until launch readiness is approved.'
-    })
-  }
-
   const webhookSecret = process.env.WEBHOOK_SECRET
   const supabaseUrl = process.env.SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
@@ -41,6 +34,7 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   })
+
   const { data: queuedItems, error: queueError } = await supabase
     .from('todays_queue')
     .select('campaign')
@@ -51,9 +45,52 @@ export default async function handler(req, res) {
     return res.status(200).json({ message: 'Nothing in queue today', results: { sent: [], failed: [], skipped: [] } })
   }
 
-  const readyCampaigns = []
+  const { data: senders, error: senderError } = await supabase
+    .from('senders')
+    .select('campaign,email')
+  if (senderError) return res.status(503).json({ error: 'Unable to load sending domains.' })
+
+  const allowedCampaigns = []
   const blockedCampaigns = []
   for (const campaign of queuedCampaigns) {
+    if (!campaignAutomationEnabled(campaign)) {
+      blockedCampaigns.push({ campaign, reason: 'Campaign automation is off' })
+      continue
+    }
+
+    const listing = await campaignBlockedBySurbl(campaign, senders)
+    if (listing.blocked) {
+      blockedCampaigns.push({ campaign, reason: listing.reason })
+      continue
+    }
+
+    allowedCampaigns.push(campaign)
+  }
+
+  if (allowedCampaigns.length === 0) {
+    return res.status(200).json({
+      blockedCampaigns,
+      message: 'No campaign is allowed to send.',
+      results: { sent: [], failed: [], skipped: [] }
+    })
+  }
+
+  let replySync
+  try {
+    replySync = await syncProspectReplies(supabase, { campaigns: allowedCampaigns })
+  } catch (error) {
+    return res.status(503).json({ error: error.message || 'Reply check failed. No email was sent.' })
+  }
+
+  if (replySync.mailboxes === 0 || replySync.errors.length > 0) {
+    return res.status(503).json({
+      error: 'Reply inboxes could not be read. No email was sent.',
+      replySync
+    })
+  }
+
+  const readyCampaigns = []
+  for (const campaign of allowedCampaigns) {
     const readinessResponse = await fetch(`${origin}/api/readiness?campaign=${encodeURIComponent(campaign)}`, {
       headers: { 'x-a305-secret': webhookSecret },
       method: 'GET'
@@ -80,5 +117,5 @@ export default async function handler(req, res) {
     campaignResults.push({ campaign, result: await sendResponse.json(), status: sendResponse.status })
   }
 
-  return res.status(200).json({ blockedCampaigns, campaignResults })
+  return res.status(200).json({ blockedCampaigns, campaignResults, replySync })
 }

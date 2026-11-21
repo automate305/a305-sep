@@ -18,6 +18,7 @@ import {
   verifySmtpSender,
 } from "@/lib/services/smtp.js";
 import { parseContactCsv } from "@/lib/utils/contact-import.js";
+import { loadSuppressionRows, suppressionBlocks } from "@/lib/services/send-block.js";
 import {
   SUPPRESSION_SOURCES,
   parseSuppressionCsv,
@@ -302,7 +303,7 @@ export async function importContactsAndEnroll(
 
   const { data: sequence, error: sequenceError } = await supabase
     .from("sequences")
-    .select("id,name,active")
+    .select("id,name,active,campaign")
     .eq("id", sequenceId)
     .maybeSingle();
   if (sequenceError) {
@@ -338,8 +339,18 @@ export async function importContactsAndEnroll(
     return { message: `Imported contact lookup failed: ${importedContactError.message}`, status: "error" };
   }
 
+  let suppressionRows: Awaited<ReturnType<typeof loadSuppressionRows>> = [];
+  try {
+    suppressionRows = await loadSuppressionRows(supabase, emails);
+  } catch (error) {
+    return {
+      message: error instanceof Error ? error.message : "Suppression lookup failed.",
+      status: "error",
+    };
+  }
   const eligibleContacts = (importedContacts || []).filter(
-    (contact) => !contact.unsubscribed && !contact.bounced,
+    (contact) => !contact.unsubscribed && !contact.bounced &&
+      !suppressionBlocks(suppressionRows, contact.email, sequence.campaign),
   );
   const suppressedCount = (importedContacts || []).length - eligibleContacts.length;
   const eligibleContactIds = eligibleContacts.map((contact) => contact.id);

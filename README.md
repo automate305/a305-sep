@@ -178,7 +178,9 @@ conservative campaign ramp:
 
 ## Managing replies / bounces
 
-When you see a reply or bounce in the Google Workspace or Hostinger inbox:
+The weekday send reads the sending inboxes first. A message from a contact stops that person's active, held, and paused steps and suppresses the address. The same check runs every day at 7:30 AM ET via `/api/cron/daily-replies`. A permanent SMTP refusal (5xx to the recipient, not an authentication failure) is recorded as a bounce and is not retried the next morning.
+
+The manual endpoint remains for anything the inbox check did not see:
 
 ```bash
 # Someone replied — stop sequence

@@ -12,6 +12,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 import { SUPPRESSION_SOURCES, suppressContact } from '../../lib/services/suppression.js'
+import { stopContactForBounce, stopContactForReply } from '../../lib/services/stop-contact.js'
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -43,27 +44,21 @@ export default async function handler(req, res) {
   // one transaction that records the suppression, flags the contact and
   // stands the enrollments down together. Doing those as separate writes is
   // how a contact ends up suppressed in one table and mailable in another.
-  if (status === 'unsubscribed' || status === 'bounced') {
+  if (status === 'replied' || status === 'bounced' || status === 'unsubscribed') {
     try {
-      const result = await suppressContact(supabase, {
-        email: normalizedEmail,
-        reason: status === 'bounced'
-          ? 'Hard bounce reported by an operator'
-          : 'Unsubscribe reported by an operator',
-        scope: 'global',
-        source: status === 'bounced'
-          ? SUPPRESSION_SOURCES.BOUNCE
-          : SUPPRESSION_SOURCES.REPLY
-      })
+      const result = status === 'replied'
+        ? await stopContactForReply(supabase, normalizedEmail, 'Reply reported by an operator')
+        : status === 'bounced'
+          ? await stopContactForBounce(supabase, normalizedEmail, 'Hard bounce reported by an operator')
+          : await suppressContact(supabase, {
+              email: normalizedEmail,
+              reason: 'Unsubscribe reported by an operator',
+              scope: 'global',
+              source: SUPPRESSION_SOURCES.MANUAL
+            })
 
       if (!result?.contact_found) {
         return res.status(404).json({ error: 'Contact not found' })
-      }
-
-      // The contacts.bounced flag is separate from unsubscribed and the
-      // function does not set it, so a bounce still records it here.
-      if (status === 'bounced') {
-        await supabase.from('contacts').update({ bounced: true }).eq('id', result.contact_id)
       }
 
       return res.status(200).json({

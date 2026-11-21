@@ -145,6 +145,7 @@ test("keeps every documented environment variable", async () => {
     "SMTP_PASS_CAMILO",
     "SMTP_PASS_HELLO",
     "SMTP_PASS_SALES",
+    "GETLEADS_API_KEY",
   ];
 
   for (const variableName of expectedVariables) {

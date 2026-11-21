@@ -2,10 +2,11 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { importContacts, type ContactImportState } from "@/app/actions";
+import { importContacts, requestGetLeadsEnrichment, type ContactEnrichmentState, type ContactImportState } from "@/app/actions";
 import type { DashboardContact } from "@/lib/services/dashboard";
 
 const initialImportState: ContactImportState = { message: "", status: "idle" };
+const initialEnrichState: ContactEnrichmentState = { message: "", status: "idle" };
 const GETLEADS_BATCH_LIMIT = 100;
 
 function csvCell(value: string | null) { return `"${String(value || "").replaceAll('"', '""')}"`; }
@@ -20,6 +21,7 @@ export function ContactsPagePanel({ contacts }: { contacts: DashboardContact[] }
   const [batchPage, setBatchPage] = useState(0);
   const [batchNotice, setBatchNotice] = useState("");
   const [importState, importAction, importing] = useActionState(importContacts, initialImportState);
+  const [enrichState, enrichAction, enriching] = useActionState(requestGetLeadsEnrichment, initialEnrichState);
   const filteredContacts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return contacts;
@@ -34,6 +36,10 @@ export function ContactsPagePanel({ contacts }: { contacts: DashboardContact[] }
     importFormRef.current?.reset();
     router.refresh();
   }, [importState.status, router]);
+  useEffect(() => {
+    if (enrichState.status !== "success") return;
+    router.refresh();
+  }, [enrichState.status, router]);
 
   function toggleContact(contactId: string) {
     setSelectedIds((current) => {
@@ -55,23 +61,16 @@ export function ContactsPagePanel({ contacts }: { contacts: DashboardContact[] }
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url);
   }
-  function prepareGetLeadsBatch() {
-    const selectedContacts = contacts.filter((contact) => selectedIds.includes(contact.id));
-    exportContacts(selectedContacts, "outbox-getleads-batch.csv");
-    setBatchNotice(`Downloaded a ${selectedContacts.length}-contact GetLeads CSV. Upload it to your Cowork GetLeads run, then import the enriched CSV back into OUTBOX.`);
-    setSelectedIds([]);
-    if (batchPage < batchCount - 1) setBatchPage((current) => current + 1);
-  }
-
   return <>
     <section className="panel contacts-hero">
       <div className="panel-heading"><div><p className="section-kicker">CONTACTS</p><h2>Build, enrich, and enroll your list</h2></div><span>{contacts.length.toLocaleString()} contacts</span></div>
       <div className="contacts-summary"><p>Import CSV lists without assigning a campaign. GetLeads batches are capped at 100 contacts so you can review quality before enrolling.</p><div><button className="secondary-action" onClick={() => exportContacts(selectedIds.length ? contacts.filter((contact) => selectedIds.includes(contact.id)) : contacts)} type="button">Export {selectedIds.length ? "selected" : "all"} CSV</button><a className="secondary-action" href="#import">Import CSV</a></div></div>
     </section>
     <section className="panel contacts-table-panel">
-      <div className="contacts-toolbar"><label><span>Search contacts</span><input onChange={(event) => { setQuery(event.target.value); setBatchPage(0); }} placeholder="Name, company, city…" value={query} /></label><div><button className="secondary-action" disabled={selectedIds.length === 0} onClick={prepareGetLeadsBatch} type="button">Enrich with GetLeads{selectedIds.length ? ` (${selectedIds.length})` : ""}</button></div></div>
+      <div className="contacts-toolbar"><label><span>Search contacts</span><input onChange={(event) => { setQuery(event.target.value); setBatchPage(0); }} placeholder="Name, company, city…" value={query} /></label><form action={enrichAction}><input name="contactIds" type="hidden" value={selectedIds.join(",")} /><button className="secondary-action" disabled={selectedIds.length === 0 || enriching} type="submit">{enriching ? "Enriching…" : `Enrich with GetLeads${selectedIds.length ? ` (${selectedIds.length})` : ""}`}</button></form></div>
       <div className="batch-help"><span>One GetLeads batch at a time. Select all chooses this page, up to {GETLEADS_BATCH_LIMIT} contacts.</span>{filteredContacts.length > GETLEADS_BATCH_LIMIT ? <div><button className="secondary-action" disabled={batchPage === 0} onClick={() => { setSelectedIds([]); setBatchPage((current) => current - 1); }} type="button">Previous 100</button><strong>{batchPage * GETLEADS_BATCH_LIMIT + 1}–{Math.min((batchPage + 1) * GETLEADS_BATCH_LIMIT, filteredContacts.length)} of {filteredContacts.length}</strong><button className="secondary-action" disabled={batchPage >= batchCount - 1} onClick={() => { setSelectedIds([]); setBatchPage((current) => current + 1); }} type="button">Next 100</button></div> : null}</div>
       {batchNotice ? <div className="action-result" role="status"><strong>{batchNotice}</strong></div> : null}
+      {enrichState.message ? <div className={`action-result ${enrichState.status}`} role="status"><strong>{enrichState.message}</strong></div> : null}
       <div className="table-scroll contacts-table"><table><thead><tr><th><input aria-label={`Select this ${GETLEADS_BATCH_LIMIT}-contact batch`} checked={allVisibleSelected} onChange={toggleVisibleContacts} type="checkbox" /></th><th>Contact</th><th>Company</th><th>Role & location</th><th>Verified email</th><th>Phone</th><th>LinkedIn</th><th>Signal</th><th>Status</th></tr></thead><tbody>{visibleContacts.map((contact) => <tr key={contact.id}><td><input aria-label={`Select ${contactName(contact)}`} checked={selectedIds.includes(contact.id)} onChange={() => toggleContact(contact.id)} type="checkbox" /></td><td><strong>{contactName(contact)}</strong><small>{contact.source || "manual"}</small></td><td>{contact.company || "—"}</td><td>{contact.title || "—"}<small>{contact.city || contact.area || "—"}</small></td><td><a href={`mailto:${contact.email}`}>{contact.email}</a></td><td>{contact.phone || "—"}</td><td>{contact.linkedinUrl ? <a href={contact.linkedinUrl} rel="noreferrer" target="_blank">View</a> : "—"}</td><td className="signal-cell">{contact.personalizedParagraph || contact.websiteObservation || "—"}</td><td><span className={`status-pill ${enrichmentStatus(contact) === "Enriched" ? "warm" : "warming"}`}>{enrichmentStatus(contact).toUpperCase()}</span></td></tr>)}</tbody></table></div>
       {filteredContacts.length === 0 ? <div className="empty-state"><strong>No contacts found</strong><p>Import a CSV or change the search to see your records.</p></div> : null}
     </section>

@@ -18,9 +18,16 @@ import {
   verifySmtpSender,
 } from "@/lib/services/smtp.js";
 import { parseContactCsv } from "@/lib/utils/contact-import.js";
+import {
+  blankFill,
+  enrichContactsByEmail,
+  fieldsFromEnrichment,
+  getleadsConfigured,
+} from "@/lib/services/getleads.js";
 import { loadSuppressionRows, suppressionBlocks } from "@/lib/services/send-block.js";
 import {
   SUPPRESSION_SOURCES,
+  normalizeEmail,
   parseSuppressionCsv,
   reinstateContact,
   suppressContact,
@@ -598,8 +605,55 @@ export async function requestGetLeadsEnrichment(
   if (!(await hasDashboardAccess())) return { message: "Dashboard session expired. Unlock it again.", status: "error" };
   const contactIds = String(formData.get("contactIds") || "").split(",").filter((id) => enrollmentIdPattern.test(id));
   if (contactIds.length === 0 || contactIds.length > 100) return { message: "Choose between 1 and 100 contacts to enrich.", status: "error" };
+  if (!getleadsConfigured()) {
+    return { message: "Add GETLEADS_API_KEY in Vercel, then enrich again. Nothing was changed.", status: "error" };
+  }
+
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return { message: "Supabase is not configured.", status: "error" };
+
+  const { data: contacts, error } = await supabase
+    .from("contacts")
+    .select("id,email,first_name,last_name,company,title,phone,city,linkedin_url")
+    .in("id", contactIds);
+  if (error) return { message: `Contact lookup failed: ${error.message}`, status: "error" };
+  if (!contacts || contacts.length === 0) return { message: "Those contacts are no longer in Outbox.", status: "error" };
+
+  let results;
+  try {
+    results = await enrichContactsByEmail(contacts.map((contact) => contact.email));
+  } catch (enrichmentError) {
+    return {
+      message: enrichmentError instanceof Error ? enrichmentError.message : "GetLeads failed. Nothing was changed.",
+      status: "error",
+    };
+  }
+
+  const byEmail = new Map(results.map((result: { data?: Record<string, unknown>; email: string }) => [result.email, result]));
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const contact of contacts) {
+    const result = byEmail.get(normalizeEmail(contact.email));
+    const patch = result ? blankFill(contact, fieldsFromEnrichment(result)) : {};
+    if (Object.keys(patch).length === 0) {
+      unchanged += 1;
+      continue;
+    }
+
+    const { error: updateError } = await supabase.from("contacts").update(patch).eq("id", contact.id);
+    if (updateError) {
+      return {
+        message: `Saved ${updated} contact${updated === 1 ? "" : "s"} before a write failed: ${updateError.message}`,
+        status: "error",
+      };
+    }
+    updated += 1;
+  }
+
+  revalidatePath("/contacts");
   return {
-    message: `Selected ${contactIds.length} contact${contactIds.length === 1 ? "" : "s"}. Export them for the Cowork GetLeads run; OUTBOX does not yet have a direct GetLeads API connection, so this safely avoids inventing enrichment data.`,
+    message: `GetLeads filled ${updated} contact${updated === 1 ? "" : "s"}. ${unchanged} had nothing new to store.`,
     status: "success",
   };
 }

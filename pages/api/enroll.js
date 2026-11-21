@@ -23,6 +23,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 
+import { loadSuppressionRows, suppressionBlocks } from '../../lib/services/send-block.js'
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -47,7 +49,7 @@ export default async function handler(req, res) {
   // Get sequence ID
   const { data: seq, error: seqErr } = await supabase
     .from('sequences')
-    .select('id')
+    .select('id,campaign')
     .eq('name', sequence)
     .single()
 
@@ -86,6 +88,17 @@ export default async function handler(req, res) {
         .single()
 
       if (cErr) throw cErr
+
+      if (c.unsubscribed || c.bounced) {
+        results.skipped.push(contact.email)
+        continue
+      }
+
+      const suppressionRows = await loadSuppressionRows(supabase, [c.email])
+      if (suppressionBlocks(suppressionRows, c.email, seq.campaign)) {
+        results.skipped.push(contact.email)
+        continue
+      }
 
       // First touches default to approval mode. The dashboard can approve or
       // skip them without exposing the webhook or Supabase service secrets.

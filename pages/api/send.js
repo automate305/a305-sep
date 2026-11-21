@@ -14,6 +14,9 @@ import { createClient } from '@supabase/supabase-js'
 import { createSenderGate } from '../../lib/services/sender-gate.js'
 import { createSmtpTransporter } from '../../lib/services/smtp.js'
 import { buildEmailFooter } from '../../lib/services/email-footer.js'
+import { blockingSuppression, loadSuppressionRows } from '../../lib/services/send-block.js'
+import { isPermanentRecipientFailure } from '../../lib/services/smtp-failure.js'
+import { stopContactForBounce } from '../../lib/services/stop-contact.js'
 import { buildUnsubscribeUrl, getUnsubscribeSigningKey } from '../../lib/services/suppression.js'
 
 const supabase = createClient(
@@ -156,12 +159,47 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'Nothing in queue today', results })
     }
 
+    const contactIds = [...new Set(campaignQueue.map((item) => item.contact_id).filter(Boolean))]
+    if (contactIds.length === 0) throw new Error('Queue rows are missing contact ids. No email was sent.')
+    const { data: contactFlags, error: flagError } = await supabase
+      .from('contacts')
+      .select('id,bounced,unsubscribed')
+      .in('id', contactIds)
+    if (flagError) throw new Error('Contact suppression lookup failed. No email was sent.')
+    const flagsById = new Map((contactFlags || []).map((contact) => [contact.id, contact]))
+    const suppressionRows = await loadSuppressionRows(
+      supabase,
+      campaignQueue.map((item) => item.email)
+    )
+
     console.log(`📬 Queue: ${campaignQueue.length} emails to process`)
 
     // 2. Process each enrollment
     for (const item of campaignQueue) {
 
       try {
+        const flags = flagsById.get(item.contact_id)
+        const blocked = flags?.bounced
+          ? { reason: 'Contact is bounced', status: 'bounced' }
+          : flags?.unsubscribed
+            ? { reason: 'Contact is unsubscribed', status: 'unsubscribed' }
+            : blockingSuppression(suppressionRows, item.email, item.campaign)
+
+        if (blocked) {
+          await supabase
+            .from('enrollments')
+            .update({
+              completed_at: new Date().toISOString(),
+              held_at: null,
+              hold_reason: null,
+              status: blocked.status
+            })
+            .eq('id', item.enrollment_id)
+            .in('status', ['active', 'held', 'paused'])
+          results.skipped.push({ email: item.email, reason: blocked.reason })
+          continue
+        }
+
         // Pick a sender with capacity, scoped to this item's campaign
         const sender = await pickSender(gate, item.campaign)
 
@@ -261,6 +299,32 @@ export default async function handler(req, res) {
 
       } catch (sendErr) {
         console.error(`❌ Failed: ${item.email}`, sendErr.message)
+
+        if (isPermanentRecipientFailure(sendErr)) {
+          try {
+            await stopContactForBounce(
+              supabase,
+              item.email,
+              `Permanent SMTP refusal ${sendErr.responseCode}`
+            )
+            await supabase.from('send_log').insert({
+              enrollment_id: item.enrollment_id,
+              contact_id:    item.contact_id,
+              step:          item.step,
+              status:        'bounced',
+              error_message: 'Permanent recipient refusal'
+            })
+            results.failed.push({ email: item.email, error: 'Permanent recipient refusal' })
+          } catch {
+            await supabase.from('enrollments').update({
+              held_at: new Date().toISOString(),
+              hold_reason: 'Permanent SMTP failure needs review',
+              status: 'held'
+            }).eq('id', item.enrollment_id)
+            results.failed.push({ email: item.email, error: 'Permanent recipient refusal could not be recorded' })
+          }
+          continue
+        }
 
         // Log failure
         await supabase.from('send_log').insert({

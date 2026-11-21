@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/daily-replies",
+      "schedule": "30 12 * * *"
+    },
+    {
       "path": "/api/cron/daily-send",
       "schedule": "0 13 * * 1-5"
     },

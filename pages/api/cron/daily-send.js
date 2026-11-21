@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 
+import { syncProspectReplies } from '../../../lib/services/reply-sync.js'
 import { isUsableEnvironmentValue } from '../../../lib/services/smtp.js'
 
 const automationEnabled = () => process.env.CAMPAIGN_AUTOMATION_ENABLED === 'true'
@@ -41,6 +42,21 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   })
+
+  let replySync
+  try {
+    replySync = await syncProspectReplies(supabase)
+  } catch (error) {
+    return res.status(503).json({ error: error.message || 'Reply check failed. No email was sent.' })
+  }
+
+  if (replySync.mailboxes === 0 || replySync.errors.length > 0) {
+    return res.status(503).json({
+      error: 'Reply inboxes could not be read. No email was sent.',
+      replySync
+    })
+  }
+
   const { data: queuedItems, error: queueError } = await supabase
     .from('todays_queue')
     .select('campaign')
@@ -80,5 +96,5 @@ export default async function handler(req, res) {
     campaignResults.push({ campaign, result: await sendResponse.json(), status: sendResponse.status })
   }
 
-  return res.status(200).json({ blockedCampaigns, campaignResults })
+  return res.status(200).json({ blockedCampaigns, campaignResults, replySync })
 }

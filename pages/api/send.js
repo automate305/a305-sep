@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 
 import { createSenderGate } from '../../lib/services/sender-gate.js'
 import { createSmtpTransporter } from '../../lib/services/smtp.js'
+import { buildEmailFooter } from '../../lib/services/email-footer.js'
 import { buildUnsubscribeUrl, getUnsubscribeSigningKey } from '../../lib/services/suppression.js'
 
 const supabase = createClient(
@@ -204,11 +205,23 @@ export default async function handler(req, res) {
             }
           : { 'List-Unsubscribe': `<${unsubMailto}>` }
 
-        const footer = unsubUrl
-          ? `\n\n---\nDon't want to hear from me? Unsubscribe here: ${unsubUrl}\n` +
-            `Or reply "unsubscribe" and I'll take you off the list.`
-          : `\n\n---\nDon't want to hear from me? Reply "unsubscribe" and I'll ` +
-            `take you off the list.`
+        // No postal address for this brand means no send: hold, never mail without one.
+        const footer = buildEmailFooter({ campaign: item.campaign, unsubscribeUrl: unsubUrl })
+        if (footer === null) {
+          await supabase
+            .from('enrollments')
+            .update({
+              status: 'held',
+              hold_reason: 'No sender postal address configured for this brand',
+              held_at: new Date().toISOString()
+            })
+            .eq('id', item.enrollment_id)
+          results.skipped.push({
+            email: item.email,
+            reason: 'No sender postal address configured for this brand'
+          })
+          continue
+        }
 
         // Route Automate305 through Google Workspace and Aesthetic through Hostinger.
         const transporter = createSmtpTransporter(sender)

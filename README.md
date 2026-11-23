@@ -229,6 +229,16 @@ marks the enrollment `completed` when no further step exists.
 
 ---
 
+## Outbox MCP
+
+`mcp/server.mjs` is a stdio MCP the agent can use to run Outbox. It calls this app's HTTP API. It does not hold SMTP passwords.
+
+Copy `mcp/cursor-mcp.example.json` into your Cursor MCP config. Set `OUTBOX_URL` to the deployed origin and `OUTBOX_SECRET` to the same value as `WEBHOOK_SECRET`. Keep the secret out of git.
+
+Enroll always leaves the first touch held. `outbox_review_hold` approves or skips one hold. `outbox_send_approved` processes only the already-approved queue, and only when `confirm` is `send-approved-queue`.
+
+Run it directly with `node mcp/server.mjs`.
+
 ## API endpoints
 
 | Endpoint | Method | Purpose |
@@ -237,6 +247,8 @@ marks the enrollment `completed` when no further step exists.
 | `/api/enroll` | POST | Add contacts to a sequence |
 | `/api/update-status` | POST | Mark replied/bounced/unsubscribed |
 | `/api/health` | GET | Public placeholder-aware config check |
+| `/api/overview` | GET | Sequences, sender caps, pipeline counts, held rows |
+| `/api/review` | POST | Approve or skip one held enrollment |
 | `/api/readiness` | GET | Protected, no-send SMTP authentication check |
 
 The handlers live under `pages/api/` so their public URLs and request/response

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "outbox": {
+      "command": "node",
+      "args": ["mcp/server.mjs"],
+      "env": {
+        "OUTBOX_URL": "https://a305-sep.vercel.app",
+        "OUTBOX_SECRET": "set-this-locally-to-the-same-value-as-WEBHOOK_SECRET"
+      }
+    }
+  }
+}

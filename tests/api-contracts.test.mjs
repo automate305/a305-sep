@@ -70,7 +70,7 @@ test("treats documented placeholders as unconfigured", async () => {
 });
 
 test("preserves authentication on all mutation routes", async () => {
-  const routeNames = ["enroll", "send", "update-status"];
+  const routeNames = ["enroll", "review", "send", "update-status"];
 
   for (const routeName of routeNames) {
     const { default: handler } = await import(`../pages/api/${routeName}.js`);
@@ -81,6 +81,33 @@ test("preserves authentication on all mutation routes", async () => {
     assert.equal(response.statusCode, 401, `${routeName} must remain protected`);
     assert.deepEqual(response.body, { error: "Unauthorized" });
   }
+});
+
+test("protects the operator overview route", async () => {
+  const { default: overviewHandler } = await import("../pages/api/overview.js");
+  const response = createResponse();
+
+  await overviewHandler({ headers: {}, method: "GET", query: {} }, response);
+
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.body, { error: "Unauthorized" });
+});
+
+test("rejects a hold review that is not approve or skip", async () => {
+  const { default: reviewHandler } = await import("../pages/api/review.js");
+  const response = createResponse();
+
+  await reviewHandler(
+    {
+      body: { decision: "send", enrollment_id: "not-an-id" },
+      headers: { "x-a305-secret": process.env.WEBHOOK_SECRET },
+      method: "POST",
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.error, /approve or skip/);
 });
 
 test("protects the no-send SMTP readiness route", async () => {

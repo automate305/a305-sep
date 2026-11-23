@@ -2,6 +2,8 @@
 // Stdio MCP for Outbox (a305-sep). Talks only to the existing HTTP API.
 // OUTBOX_URL is the deployed origin. OUTBOX_SECRET is the x-a305-secret value.
 // Neither value is printed.
+// Replies are newline-delimited JSON-RPC. A Content-Length request switches
+// replies to header framing for the rest of the process.
 
 const PROTOCOL = '2024-11-05'
 const SEND_CONFIRM = 'send-approved-queue'
@@ -112,8 +114,15 @@ const TOOLS = [
   }
 ]
 
+let headerReplies = false
+
 function send(message) {
-  const payload = Buffer.from(JSON.stringify(message), 'utf8')
+  const json = JSON.stringify(message)
+  if (!headerReplies) {
+    process.stdout.write(json + '\n')
+    return
+  }
+  const payload = Buffer.from(json, 'utf8')
   process.stdout.write(`Content-Length: ${payload.length}\r\n\r\n`)
   process.stdout.write(payload)
 }
@@ -254,33 +263,66 @@ async function handle(message) {
   })
 }
 
+function leadingWhitespace(buffer) {
+  let index = 0
+  while (index < buffer.length) {
+    const byte = buffer[index]
+    if (byte !== 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0d && byte !== 0x0b && byte !== 0x0c) break
+    index += 1
+  }
+  return index
+}
+
+function startsWithContentLength(buffer) {
+  const prefix = 'content-length'
+  if (buffer.length < prefix.length) return false
+  return buffer.subarray(0, prefix.length).toString('ascii').toLowerCase() === prefix
+}
+
+function accept(raw) {
+  try {
+    handle(JSON.parse(raw))
+  } catch (error) {
+    send({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32700, message: error.message || 'Parse error' }
+    })
+  }
+}
+
 function start() {
   let buffer = Buffer.alloc(0)
   process.stdin.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk])
-    while (true) {
-      const headerEnd = buffer.indexOf('\r\n\r\n')
-      if (headerEnd === -1) return
-      const header = buffer.slice(0, headerEnd).toString('utf8')
-      const match = header.match(/Content-Length:\s*(\d+)/i)
-      if (!match) {
-        buffer = buffer.slice(headerEnd + 4)
+    while (buffer.length > 0) {
+      const skip = leadingWhitespace(buffer)
+      if (skip === buffer.length) return
+      const rest = buffer.subarray(skip)
+      if (startsWithContentLength(rest)) {
+        headerReplies = true
+        const headerEnd = rest.indexOf('\r\n\r\n')
+        if (headerEnd === -1) return
+        const header = rest.subarray(0, headerEnd).toString('utf8')
+        const match = header.match(/Content-Length:\s*(\d+)/i)
+        if (!match) {
+          buffer = Buffer.from(rest.subarray(headerEnd + 4))
+          continue
+        }
+        const length = Number(match[1])
+        const startAt = headerEnd + 4
+        if (rest.length < startAt + length) return
+        const raw = rest.subarray(startAt, startAt + length).toString('utf8')
+        buffer = Buffer.from(rest.subarray(startAt + length))
+        accept(raw)
         continue
       }
-      const length = Number(match[1])
-      const startAt = headerEnd + 4
-      if (buffer.length < startAt + length) return
-      const raw = buffer.slice(startAt, startAt + length).toString('utf8')
-      buffer = buffer.slice(startAt + length)
-      try {
-        handle(JSON.parse(raw))
-      } catch (error) {
-        send({
-          jsonrpc: '2.0',
-          id: null,
-          error: { code: -32700, message: error.message || 'Parse error' }
-        })
-      }
+      const newline = rest.indexOf('\n')
+      if (newline === -1) return
+      const line = rest.subarray(0, newline).toString('utf8').trim()
+      buffer = Buffer.from(rest.subarray(newline + 1))
+      if (!line) continue
+      accept(line)
     }
   })
 }

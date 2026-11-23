@@ -33,6 +33,40 @@ function readFrames(socket) {
   };
 }
 
+function line(message) {
+  return `${JSON.stringify(message)}\n`;
+}
+
+function readLines() {
+  let buffer = "";
+  const messages = [];
+  return {
+    push(chunk) {
+      buffer += chunk.toString("utf8");
+      while (true) {
+        const newline = buffer.indexOf("\n");
+        if (newline === -1) return;
+        const text = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (!text) continue;
+        messages.push(JSON.parse(text));
+      }
+    },
+    messages,
+  };
+}
+
+const initialize = {
+  jsonrpc: "2.0",
+  id: 1,
+  method: "initialize",
+  params: {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+    clientInfo: { name: "test", version: "0" },
+  },
+};
+
 test("lists Outbox tools and refuses a send without the confirm phrase", async () => {
   const child = spawn(process.execPath, ["mcp/server.mjs"], {
     cwd: new URL("..", import.meta.url),
@@ -43,12 +77,7 @@ test("lists Outbox tools and refuses a send without the confirm phrase", async (
   const stderr = [];
   child.stderr.on("data", (chunk) => stderr.push(chunk.toString()));
 
-  child.stdin.write(frame({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "initialize",
-    params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "0" } },
-  }));
+  child.stdin.write(frame(initialize));
   child.stdin.write(frame({ jsonrpc: "2.0", method: "notifications/initialized" }));
   child.stdin.write(frame({ jsonrpc: "2.0", id: 2, method: "tools/list" }));
   child.stdin.write(frame({
@@ -74,4 +103,41 @@ test("lists Outbox tools and refuses a send without the confirm phrase", async (
   ]);
   assert.equal(reader.messages[2].result.isError, true);
   assert.match(reader.messages[2].result.content[0].text, /Refused/);
+});
+
+test("answers a newline initialize and tools/list round trip", async () => {
+  const child = spawn(process.execPath, ["mcp/server.mjs"], {
+    cwd: new URL("..", import.meta.url),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const reader = readLines();
+  child.stdout.on("data", (chunk) => reader.push(chunk));
+  const stderr = [];
+  child.stderr.on("data", (chunk) => stderr.push(chunk.toString()));
+
+  child.stdin.write("\n");
+  child.stdin.write(line(initialize));
+  child.stdin.write(line({ jsonrpc: "2.0", method: "notifications/initialized" }));
+  child.stdin.write(line({ jsonrpc: "2.0", id: 2, method: "tools/list" }));
+  child.stdin.end();
+
+  const exitCode = await new Promise((resolve) => child.on("close", resolve));
+  assert.equal(exitCode, 0, stderr.join(""));
+  assert.equal(reader.messages.length, 2);
+  assert.equal(reader.messages[0].id, 1);
+  assert.equal(reader.messages[0].result.protocolVersion, "2024-11-05");
+  assert.equal(reader.messages[0].result.serverInfo.name, "outbox");
+  assert.equal(reader.messages[1].id, 2);
+  assert.deepEqual(
+    reader.messages[1].result.tools.map((tool) => tool.name),
+    [
+      "outbox_health",
+      "outbox_readiness",
+      "outbox_overview",
+      "outbox_enroll",
+      "outbox_review_hold",
+      "outbox_set_contact_status",
+      "outbox_send_approved",
+    ],
+  );
 });

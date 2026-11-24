@@ -233,7 +233,7 @@ marks the enrollment `completed` when no further step exists.
 
 `mcp/server.mjs` is a stdio MCP the agent can use to run Outbox. It calls this app's HTTP API. It does not hold SMTP passwords.
 
-Copy `mcp/cursor-mcp.example.json` into your Cursor MCP config. Set `OUTBOX_URL` to the deployed origin and `OUTBOX_SECRET` to the same value as `WEBHOOK_SECRET`. Keep the secret out of git.
+Copy `mcp/cursor-mcp.example.json` into your Cursor MCP config. Set `OUTBOX_URL` to `https://outbox.automate305.com` and `OUTBOX_SECRET` to the same value as `WEBHOOK_SECRET`. Keep the secret out of git.
 
 Enroll always leaves the first touch held. `outbox_review_hold` approves or skips one hold. `outbox_send_approved` processes only the already-approved queue, and only when `confirm` is `send-approved-queue`.
 

@@ -4,7 +4,7 @@
       "command": "node",
       "args": ["mcp/server.mjs"],
       "env": {
-        "OUTBOX_URL": "https://a305-sep.vercel.app",
+        "OUTBOX_URL": "https://outbox.automate305.com",
         "OUTBOX_SECRET": "set-this-locally-to-the-same-value-as-WEBHOOK_SECRET"
       }
     }

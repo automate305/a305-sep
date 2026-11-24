@@ -9,6 +9,8 @@
 // so HVAC mail never goes out from the aesthetic mailboxes.
 // ============================================================
 
+import { randomUUID } from 'node:crypto'
+
 import { createClient } from '@supabase/supabase-js'
 
 import { campaignBlockedBySurbl } from '../../lib/services/campaign-launch.js'
@@ -18,6 +20,7 @@ import { buildEmailFooter } from '../../lib/services/email-footer.js'
 import { blockingSuppression, loadSuppressionRows } from '../../lib/services/send-block.js'
 import { isPermanentRecipientFailure } from '../../lib/services/smtp-failure.js'
 import { stopContactForBounce } from '../../lib/services/stop-contact.js'
+import { getTrackingConfig, prepareTracking } from '../../lib/services/tracking.js'
 import { buildUnsubscribeUrl, getUnsubscribeSigningKey } from '../../lib/services/suppression.js'
 
 const supabase = createClient(
@@ -224,7 +227,7 @@ export default async function handler(req, res) {
 
         // Merge template
         const subject = mergeTemplate(item.subject, item, sender).toLowerCase()
-        const body = mergeTemplate(item.body_text, item, sender)
+        let body = mergeTemplate(item.body_text, item, sender)
 
         // Fail closed before SMTP if a template contains an unknown merge field.
         const subjectWordCount = subject.split(/\s+/).filter(Boolean).length
@@ -280,6 +283,22 @@ export default async function handler(req, res) {
           continue
         }
 
+        // Optional open/click tracking. Off unless TRACKER_API_KEY is set and this
+        // sender's domain is in TRACKER_DOMAINS; any tracker failure sends the
+        // message untracked. The message id doubles as send_log.id so tracker
+        // events join straight to the send. The footer and unsubscribe link are
+        // never rewritten.
+        const messageId = randomUUID()
+        const tracking = await prepareTracking({
+          config: getTrackingConfig(sender.email),
+          messageId,
+          recipient: item.email,
+          campaign: item.campaign,
+          body,
+          footer
+        })
+        body = tracking.body
+
         // Route Automate305 through Google Workspace and Aesthetic through Hostinger.
         const transporter = createSmtpTransporter(sender)
         await transporter.sendMail({
@@ -287,12 +306,14 @@ export default async function handler(req, res) {
           to:      item.email,
           subject: subject,
           text:    body + footer,
+          ...(tracking.html ? { html: tracking.html } : {}),
           replyTo: replyTo,
           headers: listUnsubscribeHeaders
         })
 
         // Log the send
         await supabase.from('send_log').insert({
+          id:            messageId,
           enrollment_id: item.enrollment_id,
           contact_id:    item.contact_id,
           sender_id:     sender.id,

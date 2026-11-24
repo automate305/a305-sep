@@ -214,14 +214,14 @@ marks the enrollment `completed` when no further step exists.
 | 2    | +4  | Follow-up angle |
 | 3    | +8  | Breakup / last touch |
 
-**HVAC** (`hvac_a`, `hvac_b`) — 4 email steps, 14 days:
+**HVAC** (`hvac_a`, `hvac_b`): 4 email steps, both lead with the AI Receptionist demo at desk.automate305.com:
 
-| Step | Day | `hvac_a` (offer-led) | `hvac_b` (ROI angle) |
-|------|-----|----------------------|----------------------|
-| 1    | 0   | opener               | research drop |
-| 2    | +3  | proof                | the numbers |
-| 3    | +7  | free website         | peer move |
-| 4    | +14 | breakup              | direct ask |
+| Step | Delay | `hvac_a` ("after hours calls") | `hvac_b` ("the unanswered call") |
+|------|-------|--------------------------------|----------------------------------|
+| 1    | 0     | missed call, offer demo link   | {{pain_point}} starts at the phone, offer link |
+| 2    | +3    | demo link, books after caller says yes | demo link, booked job not voicemail |
+| 3    | +4    | homeowners won't leave voicemail | overflow + after-hours calls |
+| 4    | +7    | breakup with demo link         | breakup with demo link |
 
 > The ColdIQ HVAC playbook also has LinkedIn and phone touches between emails.
 > Those are **manual** and out of scope for this SMTP engine — run them from the

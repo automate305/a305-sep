@@ -208,68 +208,68 @@ Who handles that decision for your team?
   hvac_a: [
     {
       step: 1,
-      subject: "the missed job",
+      subject: "after hours calls",
       delayDays: 0,
       bodyText: `Hi {{first_name}},
 
 {{personalized_paragraph}}
 
-As a shop grows, missed handoffs turn interested callers into quiet leads. Calls, forms, and estimates need a clear next owner.
+When the crew is on a job, the phone still rings. A missed call means the customer dials the next shop.
 
-We map the path and automate the next action with the tools {{company}} already uses.
+We built an AI receptionist for HVAC owners. It answers around the clock, checks open times, and books the job.
 
-Would a 15-minute look at the workflow in {{area}} be useful?
+Want the link to hear it handle a service call?
 
 Camilo | Automate305
 automate305.com`,
     },
     {
       step: 2,
-      subject: "the missed job",
+      subject: "after hours calls",
       delayDays: 3,
       bodyText: `Hi {{first_name}},
 
 {{personalized_paragraph}}
 
-Quick follow-up. After-hours calls and open estimates often sit because nobody owns the next action.
+Here is the demo I mentioned: desk.automate305.com
 
-We map the handoff, then add a simple rule so the office does not have to chase it before the busy season.
+You can hear the receptionist take a service call and offer an open slot. It reads the details back and books only after the caller says yes.
 
-Would a 15-minute review for {{company}} in {{area}} be useful?
+Worth five minutes to try it as if you were calling {{company}}?
 
 Camilo | Automate305
 automate305.com`,
     },
     {
       step: 3,
-      subject: "the missed job",
+      subject: "after hours calls",
       delayDays: 4,
       bodyText: `Hi {{first_name}},
 
 {{personalized_paragraph}}
 
-When the office gets busy, a new lead should not depend on a spreadsheet, voicemail, or someone remembering.
+Most homeowners in {{area}} will not leave a voicemail for a broken AC. They call the next shop.
 
-We help HVAC teams move each inquiry to the right person and automate the next follow-up.
+The receptionist picks up after hours and on busy days, takes the name, phone, and email, and puts the visit on the calendar.
 
-Would it help to see the first workflow I would review for {{company}}?
+Would a 15-minute walkthrough for {{company}} be useful?
 
 Camilo | Automate305
 automate305.com`,
     },
     {
       step: 4,
-      subject: "the missed job",
+      subject: "after hours calls",
       delayDays: 7,
       bodyText: `Hi {{first_name}},
 
 {{personalized_paragraph}}
 
-Last note. I do not know if lead response and follow-up are a priority for {{company}}.
+Last note from me. If every call at {{company}} already gets answered, you can ignore this.
 
-If they are, I can point to the first workflow worth checking before another busy week adds more office work.
+If some go to voicemail after hours, the AI receptionist can pick those up and book from your open times.
 
-Would a 15-minute review be useful, or should I close this out?
+The demo is at desk.automate305.com. Should I close this out?
 
 Camilo | Automate305
 automate305.com`,
@@ -278,68 +278,70 @@ automate305.com`,
   hvac_b: [
     {
       step: 1,
-      subject: "the hidden handoff",
+      subject: "the unanswered call",
       delayDays: 0,
       bodyText: `Hi {{first_name}},
 
 {{personalized_paragraph}}
 
-As a shop grows, {{pain_point}} can become a leak. Calls wait, jobs get lost, and office work grows.
+For a growing shop, {{pain_point}} starts at the phone. Calls come in while the office is busy, and some never get a callback.
 
-We help HVAC teams map the handoff, find the delay, and automate the next step.
+We built an AI receptionist for HVAC teams. It answers around the clock and books from your open times.
 
-Would a 15-minute look at the process in {{area}} be useful for {{company}}?
+Want the link to hear it handle a call?
 
 Camilo | Automate305
 automate305.com`,
     },
     {
       step: 2,
-      subject: "the hidden handoff",
+      subject: "the unanswered call",
       delayDays: 3,
       bodyText: `Hi {{first_name}},
 
 {{personalized_paragraph}}
 
-Most owners do not need another app. They need the work between the apps to stop landing on the office.
+Here is the demo: desk.automate305.com
 
-That is where {{pain_point}} gets expensive. Someone has to remember, chase, or re-enter the same information.
+It answers a service call, checks availability before offering a slot, and collects name, phone, and email. Nothing is saved until the caller confirms.
 
-Would it help if I sent the first workflow I would review for {{company}}?
+Your office gets a booked job, not a voicemail.
+
+Would it help to hear it before your next busy week?
 
 Camilo | Automate305
 automate305.com`,
     },
     {
       step: 3,
-      subject: "the hidden handoff",
+      subject: "the unanswered call",
       delayDays: 4,
       bodyText: `Hi {{first_name}},
 
 {{personalized_paragraph}}
 
-The most costly process problem is the one nobody owns. A lead comes in, one person sees it, another follows up, and the customer waits.
+Your office does not need another app to watch. It needs fewer calls landing on someone already busy.
 
-We help {{company}} give that handoff a clear owner and an automatic next step.
+The receptionist takes overflow and after-hours calls, books from open times, and reads every detail back before saving.
 
-Would a short workflow review be useful for your team in {{area}}?
+Would a short walkthrough for {{company}} in {{area}} be useful?
 
 Camilo | Automate305
 automate305.com`,
     },
     {
       step: 4,
-      subject: "the hidden handoff",
+      subject: "the unanswered call",
       delayDays: 7,
       bodyText: `Hi {{first_name}},
 
 {{personalized_paragraph}}
 
-I will make this my last note. {{pain_point}} may already be handled well at {{company}}. If so, no need to reply.
+I will make this my last note. If {{pain_point}} is already handled at {{company}}, no need to reply.
 
-If it is manual, I can show the handoff to review before a busy week exposes it.
+If calls still slip after hours, the demo at desk.automate305.com shows how the receptionist answers and books the job.
 
-Would a 15-minute session be helpful, or should I close the file?
+Would a 15-minute session help, or should I close the file?
 
 Camilo | Automate305
 automate305.com`,

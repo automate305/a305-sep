@@ -222,6 +222,20 @@ test("a bad variant number cannot produce a broken message", () => {
   }
 });
 
+test("warmup volume stays in send_log and does not write cold sender counters", async () => {
+  const source = await readFile(new URL("../lib/services/warmup.ts", import.meta.url), "utf8");
+  const run = source.slice(
+    source.indexOf("export async function runWarmup"),
+    source.indexOf("export async function runHostingerWarmup"),
+  );
+
+  assert.match(run, /if \(sender\.warmed\) continue/);
+  assert.match(run, /status: "warmup"/);
+  assert.match(run, /\.eq\("status", "warmup"\)/);
+  assert.doesNotMatch(run, /daily_limit|sends_today/);
+  assert.doesNotMatch(run, /\.from\("senders"\)\.update/);
+});
+
 test("the send path uses the varied wording and no longer hard-codes one message", async () => {
   const source = await readFile(new URL("../lib/services/warmup.ts", import.meta.url), "utf8");
 

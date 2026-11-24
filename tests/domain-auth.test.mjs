@@ -275,6 +275,32 @@ test("a list that will not report its own test entry is unknown, never clean", a
   assert.match(blocklist.detail, /Not listed on SURBL multi; could not check Spamhaus DBL/);
 });
 
+test("a blocklist timeout is unavailable, warns, and is not a listing", async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+
+  try {
+    const blocklist = await evaluateBlocklist("example.com", null, {
+      now,
+      resolver: fakeResolver({
+        a: {
+          ...BLOCKLIST_TEST_POINTS,
+          "example.com.multi.surbl.org": dnsError("ETIMEOUT"),
+        },
+      }),
+    });
+
+    assert.notEqual(blocklist.status, "fail");
+    assert.equal(blocklist.lists.find((entry) => entry.list === "SURBL multi").outcome, "unavailable");
+    assert.match(warnings.join("\n"), /SURBL multi/);
+    assert.match(warnings.join("\n"), /ETIMEOUT/);
+    assert.match(warnings.join("\n"), /blocked only when a list reports it as listed/);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test("Spamhaus error replies are refusals, not listings", async () => {
   const blocklist = await evaluateBlocklist("example.com", null, {
     now,

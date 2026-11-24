@@ -210,6 +210,7 @@ export async function runWarmup(): Promise<WarmupResult> {
   let sent = 0;
   const progress: WarmupSenderProgress[] = [];
   for (const [senderIndex, sender] of activeSenders.entries()) {
+    if (sender.warmed) continue;
     let day: number;
     try {
       day = await activeWarmupDay(supabase, sender.id);
@@ -244,7 +245,8 @@ export async function runWarmup(): Promise<WarmupResult> {
         return { message: `Warmup stopped after ${sent} send${sent === 1 ? "" : "s"} (${describeSendError(sendError)}). Check the mailbox's Sent folder before retrying.`, ok: false, progress, sent };
       }
     }
-    await supabase.from("senders").update({ daily_limit: cap, sends_today: cap - remaining + remaining }).eq("id", sender.id);
+    // Volume stays in the warmup rows of send_log. This pass does not
+    // write sender counters, and the loop skips a graduated mailbox.
     progress.push({ activeDay: day, email: sender.email, readyToGraduate: day >= TOTAL_WARMUP_DAYS });
   }
   return { message: sent ? `${sent} internal warmup message${sent === 1 ? "" : "s"} sent. No prospects or sequences were used.` : "Today's warmup cap was already reached. No email was sent.", ok: true, progress, sent };

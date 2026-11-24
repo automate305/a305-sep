@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 import { createSenderGate } from '../../lib/services/sender-gate.js'
 import { isUsableEnvironmentValue } from '../../lib/services/smtp.js'
 
+export function campaignIsReady(senderResults) {
+  return (senderResults || []).some((sender) => sender.permitted === true && sender.warmed === true)
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
 
@@ -84,9 +88,9 @@ export default async function handler(req, res) {
     }
   }))
 
-  const ready = senderResults.length > 0 && senderResults.every(
-    (sender) => sender.permitted
-  )
+  // One permitted, warmed mailbox is enough for the campaign. An unwarmed
+  // alias must not fail this check. The sender gate still refuses that alias.
+  const ready = campaignIsReady(senderResults)
 
   return res.status(ready ? 200 : 503).json({
     checkedAt: new Date().toISOString(),

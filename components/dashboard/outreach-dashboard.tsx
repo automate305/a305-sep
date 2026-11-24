@@ -319,7 +319,7 @@ export function OutreachDashboard({
           />}
 
           {view === "approvals" && <section className="panel hold-panel" id="approvals">
-            <div className="panel-heading"><div><p className="section-kicker">APPROVAL MODE</p><h2>Hold queue</h2></div><span className={filteredHolds.length ? "attention-count" : ""}>{filteredHolds.length} held</span></div>
+            <div className="panel-heading"><div><p className="section-kicker">APPROVAL MODE</p><h2>Hold queue</h2></div><span className={selectedMetrics.held ? "attention-count" : ""}>{selectedMetrics.held} held</span></div>
             <div className="hold-list">
               {filteredHolds.slice(0, 5).map((item) => (
                 <article className="hold-row" key={item.id}>
@@ -328,7 +328,7 @@ export function OutreachDashboard({
                   <div className="hold-actions"><button disabled={isReviewPending && pendingHoldId === item.id} onClick={() => handleHoldReview(item.id, "approve")} type="button">Approve</button><button className="skip" disabled={isReviewPending && pendingHoldId === item.id} onClick={() => handleHoldReview(item.id, "skip")} type="button">Skip</button></div>
                 </article>
               ))}
-              {filteredHolds.length === 0 ? <EmptyState title="Nothing needs approval" copy="New first-touch enrollments and safety holds appear here." /> : null}
+              {filteredHolds.length === 0 && selectedMetrics.held === 0 ? <EmptyState title="Nothing needs approval" copy="New first-touch enrollments and safety holds appear here." /> : null}
             </div>
           </section>}
 
@@ -368,10 +368,10 @@ export function OutreachDashboard({
 
           {view === "activity" && <div className="operations-grid" id="activity">
             <section className="panel queue-panel">
-              <div className="panel-heading"><div><p className="section-kicker">NEXT UP</p><h2>Today&apos;s queue</h2></div><span>{filteredQueue.length} due</span></div>
+              <div className="panel-heading"><div><p className="section-kicker">NEXT UP</p><h2>Today&apos;s queue</h2></div><span>{selectedMetrics.queued} due</span></div>
               <div className="queue-list">
                 {filteredQueue.slice(0, 7).map((item) => <button className="queue-row" key={item.id} onClick={() => setSelectedQueueItem(item)} type="button"><span className={`step-number ${item.campaign}`}>{item.step}</span><span><strong>{item.name}</strong><small>{item.email}</small></span><BrandBadge campaign={item.campaign} /><Icon name="arrow" /></button>)}
-                {filteredQueue.length === 0 ? <EmptyState title="Queue is clear" copy="Approved, due enrollments will appear here." /> : null}
+                {filteredQueue.length === 0 && selectedMetrics.queued === 0 ? <EmptyState title="Queue is clear" copy="Approved, due enrollments will appear here." /> : null}
               </div>
             </section>
 

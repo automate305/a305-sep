@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 
+import { applyUncappedCounts, countAllRows } from "@/lib/services/dashboard-counts.js";
 import { isUsableEnvironmentValue } from "@/lib/services/smtp.js";
 import { activeWarmupDay, warmupProgress } from "@/lib/services/warmup";
 
@@ -478,11 +479,14 @@ export async function getDashboardData(): Promise<DashboardData> {
         .eq("status", "sent").gte("sent_at", monthStart),
       supabase.from("enrollments").select("id", { count: "exact", head: true })
         .eq("status", "replied").gte("completed_at", monthStart),
+      supabase.from("enrollments").select("id", { count: "exact", head: true })
+        .eq("status", "held"),
     ]);
 
     const [pipelineResult, sequenceResult, contactCountResult, queueResult, holdResult,
       activityResult, replyResult, senderResult,
-      sentTodayResult, failedTodayResult, sentMonthResult, repliedMonthResult] = results;
+      sentTodayResult, failedTodayResult, sentMonthResult, repliedMonthResult,
+      holdCountResult] = results;
     const queryErrors = results.map((result) => result.error).filter(Boolean);
     if (queryErrors.length > 0) {
       throw new Error(queryErrors.map((error) => error?.message).join("; "));
@@ -640,8 +644,28 @@ export async function getDashboardData(): Promise<DashboardData> {
       addMetric(brandMetrics, row.campaign, "bounced", row.bounced);
       addMetric(brandMetrics, row.campaign, "replied", row.replied);
     }
-    for (const item of queue) addMetric(brandMetrics, item.campaign, "queued");
-    for (const item of holdQueue) addMetric(brandMetrics, item.campaign, "held");
+    const queueCounts = await countAllRows((from: number, to: number) => (
+      supabase.from("todays_queue").select("campaign").order("enrollment_id").range(from, to)
+    ));
+    const holdCounts = await countAllRows(async (from: number, to: number) => {
+      const { data, error } = await supabase.from("enrollments")
+        .select("sequence:sequences(campaign)")
+        .eq("status", "held")
+        .order("id")
+        .range(from, to);
+      return {
+        data: ((data || []) as unknown as RawHoldItem[]).map((row) => ({
+          campaign: getSingleRelation(row.sequence)?.campaign || null,
+        })),
+        error,
+      };
+    });
+    applyUncappedCounts(brandMetrics, {
+      holdCount: holdCountResult.count,
+      holdCounts,
+      queueCount: queueResult.count,
+      queueCounts,
+    });
     for (const item of sentTodayRows) {
       const sender = getSingleRelation(item.sender);
       addMetric(brandMetrics, sender?.campaign || "general", "sentToday");

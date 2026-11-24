@@ -161,6 +161,10 @@ test("the reply cron is protected and the weekday send checks inboxes before mai
   );
 
   assert.ok(sendCron.indexOf("syncProspectReplies") < sendCron.indexOf("/api/send"));
+  assert.match(sendCron, /campaignAutomationEnabled\(campaign\)/);
+  assert.doesNotMatch(sendCron, /No email was sent/);
+  assert.match(sendCron, /replyWarning/);
+  assert.doesNotMatch(sendCron, /if \(replySync\.mailboxes === 0 \|\| replySync\.errors\.length > 0\) \{\s*return/s);
   assert.match(migration, /e\.status in \('active', 'held', 'paused'\)/);
   assert.match(migration, /when 'reply' then 'replied'/);
   assert.match(migration, /terminal_status <> 'replied'/);

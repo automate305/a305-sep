@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   campaignAutomationEnabled,
+  campaignBlockedBySurbl,
   domainsForCampaign,
   surblSendBlock,
 } from "../lib/services/campaign-launch.js";
@@ -38,8 +39,57 @@ test("SURBL abuse blocks sending and an unknown Spamhaus answer does not", () =>
   );
   assert.equal(
     surblSendBlock({ lists: [{ list: "SURBL multi", outcome: "unavailable" }] }).blocked,
-    true,
+    false,
   );
+  assert.equal(
+    surblSendBlock({
+      lists: [{ list: "SURBL multi", outcome: "unavailable", reason: "lookup did not complete (ETIMEOUT)" }],
+    }).warning,
+    "lookup did not complete (ETIMEOUT)",
+  );
+  assert.equal(
+    surblSendBlock({ lists: [{ list: "SURBL multi", outcome: "error" }] }).blocked,
+    false,
+  );
+});
+
+test("an unavailable SURBL answer warns and does not block the campaign", async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+
+  try {
+    const decision = await campaignBlockedBySurbl(
+      "aesthetic",
+      [{ campaign: "aesthetic", email: "matt@aestheticdevicepro.com" }],
+      {
+        evaluate: async () => ({
+          lists: [{ list: "SURBL multi", outcome: "unavailable", reason: "lookup did not complete (ETIMEOUT)" }],
+        }),
+      },
+    );
+
+    assert.equal(decision.blocked, false);
+    assert.match(warnings.join("\n"), /matt@|aestheticdevicepro\.com/);
+    assert.match(warnings.join("\n"), /ETIMEOUT/);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test("a listed SURBL answer still blocks the campaign", async () => {
+  const decision = await campaignBlockedBySurbl(
+    "aesthetic",
+    [{ campaign: "aesthetic", email: "matt@aestheticdevicepro.com" }],
+    {
+      evaluate: async () => ({
+        lists: [{ list: "SURBL multi", outcome: "listed", reason: "ABUSE (spam/abuse)" }],
+      }),
+    },
+  );
+
+  assert.equal(decision.blocked, true);
+  assert.match(decision.reason, /ABUSE/);
 });
 
 test("a campaign domain comes from its own senders", () => {

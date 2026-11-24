@@ -75,18 +75,27 @@ export default async function handler(req, res) {
     })
   }
 
-  let replySync
+  // syncProspectReplies stands down every enrollment it matched before it
+  // returns, including when another mailbox errors. An IMAP failure or an
+  // empty mailbox list is logged and the send continues.
+  let replySync = { errors: [], mailboxes: 0, matched: 0, stopped: 0 }
+  let replyWarning = null
   try {
     replySync = await syncProspectReplies(supabase, { campaigns: allowedCampaigns })
   } catch (error) {
-    return res.status(503).json({ error: error.message || 'Reply check failed. No email was sent.' })
+    replyWarning = error.message || 'Reply check failed'
+    replySync = {
+      errors: [{ mailbox: null, message: replyWarning }],
+      mailboxes: 0,
+      matched: 0,
+      stopped: 0
+    }
+    console.warn(`Reply check failed (${replyWarning}). Continuing with the send.`)
   }
 
-  if (replySync.mailboxes === 0 || replySync.errors.length > 0) {
-    return res.status(503).json({
-      error: 'Reply inboxes could not be read. No email was sent.',
-      replySync
-    })
+  if (!replyWarning && (replySync.mailboxes === 0 || (replySync.errors || []).length > 0)) {
+    replyWarning = 'Reply inboxes could not all be read. Replies already recorded are still stopped.'
+    console.warn(`${replyWarning} Continuing with the send.`)
   }
 
   const readyCampaigns = []
@@ -101,11 +110,22 @@ export default async function handler(req, res) {
   }
 
   if (readyCampaigns.length === 0) {
-    return res.status(503).json({ error: 'No queued campaign passed SMTP readiness.', blockedCampaigns })
+    return res.status(503).json({
+      blockedCampaigns,
+      error: 'No queued campaign passed SMTP readiness.',
+      replySync,
+      replyWarning
+    })
   }
 
   const { error: resetError } = await supabase.rpc('reset_daily_sends')
-  if (resetError) return res.status(503).json({ error: 'Unable to reset daily sender counts.' })
+  if (resetError) {
+    return res.status(503).json({
+      error: 'Unable to reset daily sender counts.',
+      replySync,
+      replyWarning
+    })
+  }
 
   const campaignResults = []
   for (const campaign of readyCampaigns) {
@@ -117,5 +137,5 @@ export default async function handler(req, res) {
     campaignResults.push({ campaign, result: await sendResponse.json(), status: sendResponse.status })
   }
 
-  return res.status(200).json({ blockedCampaigns, campaignResults, replySync })
+  return res.status(200).json({ blockedCampaigns, campaignResults, replySync, replyWarning })
 }

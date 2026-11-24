@@ -12,6 +12,7 @@ node_modules/
 # Next.js
 .next/
 out/
+dist/
 *.tsbuildinfo
 
 # Contact data (never commit lead lists)

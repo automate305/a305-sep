@@ -118,7 +118,7 @@ test("with the pixel on, the HTML alternative carries the pixel and the untouche
 
   assert.equal(result.tracked, true);
   assert.equal(result.body, "No links here <b>&</b> done.");
-  assert.match(result.html, new RegExp(`<img src="${ORIGIN}/o/11111111-2222-3333-4444-555555555555\\.gif"`));
+  assert.ok(result.html.includes(`<img src="${ORIGIN}/o/11111111-2222-3333-4444-555555555555.gif"`));
   assert.ok(result.html.includes("No links here &lt;b&gt;&amp;&lt;/b&gt; done."), "text is HTML-escaped");
   assert.ok(result.html.includes('<a href="https://outbox.automate305.com/api/unsubscribe?token=abc">'));
 });
@@ -153,6 +153,19 @@ test("a body with too many links is not tracked", async () => {
     { log: SILENT, fetchImpl: async () => assert.fail("must not call the tracker") },
   );
   assert.equal(result.tracked, false);
+});
+
+test("a long run of punctuation after a link is handled in linear time", () => {
+  const text = `see https://example.com/${"!".repeat(200000)}x`;
+  const started = performance.now();
+  const links = findLinks(text);
+  const rewritten = rewriteLinks(text, new Map());
+  assert.ok(performance.now() - started < 1000, "must not backtrack quadratically");
+  assert.equal(links.length, 1);
+  assert.equal(rewritten, text);
+
+  const trailing = `https://example.com/a${"!".repeat(200000)}`;
+  assert.deepEqual(findLinks(trailing), ["https://example.com/a"]);
 });
 
 test("the HTML builder escapes quotes in text and links", () => {

@@ -5,10 +5,23 @@ import { outboxRunRecord, recordOutboxRun, resetSendsForEasternDay } from '../..
 import { syncProspectReplies } from '../../../lib/services/reply-sync.js'
 import { isUsableEnvironmentValue } from '../../../lib/services/smtp.js'
 
-function getRequestOrigin(req) {
-  const host = req.headers['x-forwarded-host'] || req.headers.host
-  const protocol = req.headers['x-forwarded-proto'] || 'https'
-  return host ? `${protocol}://${host}` : null
+// The cron calls this same deployment. The host comes from Vercel or from
+// WEBHOOK_URL, never from the request, so a forged Host header cannot
+// steer the readiness or send fetch.
+export function cronSelfOrigin(environment = process.env) {
+  const vercelHost = String(environment.VERCEL_URL || '').trim()
+  if (/^[a-z0-9.-]+$/i.test(vercelHost) && vercelHost.includes('.')) {
+    return `https://${vercelHost}`
+  }
+
+  if (!isUsableEnvironmentValue(environment.WEBHOOK_URL)) return null
+  try {
+    const url = new URL(environment.WEBHOOK_URL)
+    if (url.protocol !== 'https:') return null
+    return url.origin
+  } catch {
+    return null
+  }
 }
 
 function countsFrom(body) {
@@ -58,7 +71,7 @@ export default async function handler(req, res) {
   const webhookSecret = process.env.WEBHOOK_SECRET
   const supabaseUrl = process.env.SUPABASE_URL
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
-  const origin = getRequestOrigin(req)
+  const origin = cronSelfOrigin()
   if (!origin || !isUsableEnvironmentValue(webhookSecret) ||
       !isUsableEnvironmentValue(supabaseUrl) || !isUsableEnvironmentValue(supabaseServiceKey)) {
     return finish(null, 503, { error: 'Sending automation is not fully configured.' }, {

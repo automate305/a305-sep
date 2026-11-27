@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { cronSelfOrigin } from "../pages/api/cron/daily-send.js";
 import { effectiveDailyCap, rampCapForSendingDay, sendingDayFromHistory } from "../lib/services/send-ramp.js";
 import { threadHeaders } from "../lib/services/send-thread.js";
 import { senderHasCapacity } from "../lib/services/smtp.js";
@@ -55,6 +56,19 @@ test("sending day counts distinct eastern dates on or after warmed_at, including
   });
 
   assert.equal(day, 6);
+});
+
+test("the weekday cron calls its own deployment and ignores the request host", () => {
+  assert.equal(
+    cronSelfOrigin({ VERCEL_URL: "a305-sep.vercel.app", WEBHOOK_URL: "https://evil.example" }),
+    "https://a305-sep.vercel.app",
+  );
+  assert.equal(
+    cronSelfOrigin({ WEBHOOK_URL: "https://a305-sep.vercel.app/ignored" }),
+    "https://a305-sep.vercel.app",
+  );
+  assert.equal(cronSelfOrigin({ WEBHOOK_URL: "http://a305-sep.vercel.app" }), null);
+  assert.equal(cronSelfOrigin({ VERCEL_URL: "https://evil.example" }), null);
 });
 
 test("follow-ups thread to the step-1 message id", () => {

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   campaignAutomationEnabled,
+  campaignBlockedBySurbl,
   domainsForCampaign,
   surblSendBlock,
 } from "../lib/services/campaign-launch.js";
@@ -36,10 +37,26 @@ test("SURBL abuse blocks sending and an unknown Spamhaus answer does not", () =>
     }).blocked,
     false,
   );
-  assert.equal(
-    surblSendBlock({ lists: [{ list: "SURBL multi", outcome: "unavailable" }] }).blocked,
-    true,
-  );
+  const unavailable = surblSendBlock({ lists: [{ list: "SURBL multi", outcome: "unavailable" }] });
+  assert.equal(unavailable.blocked, false);
+  assert.match(unavailable.warning, /could not be checked|not answering/);
+});
+
+test("a blocklist lookup that cannot be completed warns and does not throw", async () => {
+  let clockWasCallable = false;
+  const decision = await campaignBlockedBySurbl("aesthetic", [
+    { campaign: "aesthetic", email: "matt@aestheticdevicepro.com" },
+  ], {
+    evaluate: async (_domain, _expectation, context) => {
+      clockWasCallable = typeof context.now === "function";
+      context.now();
+      return { lists: [{ list: "SURBL multi", outcome: "unavailable", reason: "lookup did not complete" }] };
+    },
+  });
+
+  assert.equal(clockWasCallable, true);
+  assert.equal(decision.blocked, false);
+  assert.match(decision.warnings[0], /lookup did not complete/);
 });
 
 test("a campaign domain comes from its own senders", () => {

@@ -7,6 +7,7 @@ import {
   checkDomainAuthentication,
   domainAuthenticates,
   evaluateBlocklist,
+  surblQueryZone,
   evaluateDkim,
   evaluateDmarc,
   evaluateSpf,
@@ -285,6 +286,27 @@ test("Spamhaus error replies are refusals, not listings", async () => {
 
   assert.notEqual(blocklist.status, "fail", "an error code must never be reported as a listing");
   assert.equal(blocklist.status, "unknown");
+});
+
+test("an optional SURBL DQS key changes the lookup and stays out of the report", async () => {
+  const key = "abc12345";
+  const resolver = fakeResolver({
+    a: {
+      "dbltest.com.dbl.spamhaus.org": ["127.0.1.2"],
+      [`example.com.${key}.multi.surbl.org`]: ["127.0.0.64"],
+      [`test.surbl.org.${key}.multi.surbl.org`]: ["127.0.0.254"],
+    },
+  });
+  const blocklist = await evaluateBlocklist("example.com", null, {
+    environment: { SURBL_DQS_KEY: key },
+    now,
+    resolver,
+  });
+
+  assert.equal(surblQueryZone({}).zone, "multi.surbl.org");
+  assert.equal(blocklist.status, "fail");
+  assert.equal(JSON.stringify(blocklist).includes(key), false);
+  assert.equal(resolver.queried.some((hostname) => hostname.includes(key)), true);
 });
 
 test("clean on every list that is answering honestly is a pass", async () => {

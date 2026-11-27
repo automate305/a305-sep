@@ -79,14 +79,19 @@ test("runs no-send readiness before the Cowork daily send", async () => {
   );
   const sendRoute = await readFile(new URL("../pages/api/send.js", import.meta.url), "utf8");
 
-  assert.ok(dailyTrigger.indexOf("await checkSendingReadiness()") < dailyTrigger.indexOf("await resetDailySends()"));
+  assert.ok(dailyTrigger.indexOf("await resetDailySends()") < dailyTrigger.indexOf("await checkSendingReadiness()"));
+  assert.ok(dailyTrigger.indexOf("await checkSendingReadiness()") < dailyTrigger.indexOf("${WEBHOOK_URL}/api/send"));
   assert.match(dailyTrigger, /\/api\/readiness/);
   // The send route no longer filters warmed in SQL: an unwarmed mailbox
   // has to reach the gate so the refusal can name it. The gate enforces
   // warmed — see sender-gate.test.mjs.
   assert.match(sendRoute, /createSenderGate\(\)/);
   assert.match(sendRoute, /gate\.selectSender\(/);
-  assert.doesNotMatch(sendRoute, /\.limit\(1\)/);
+  const picker = sendRoute.slice(
+    sendRoute.indexOf("async function pickSender"),
+    sendRoute.indexOf("async function stepOneThread"),
+  );
+  assert.doesNotMatch(picker, /\.limit\(1\)/);
 });
 
 // ── Alias login ──────────────────────────────────────────────────────────────

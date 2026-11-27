@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { lockDashboard, reviewHeldMessage, runDomainAuthenticationCheck, runSmtpReadinessCheck, runWarmup, startGoogleWarmup, startWarmup, type DomainAuthenticationResult, type DomainCheckEntry, type SmtpReadinessResult, type WarmupResult } from "@/app/actions";
+import { approveHeldFirstTouches, lockDashboard, reviewHeldMessage, runDomainAuthenticationCheck, runSmtpReadinessCheck, runWarmup, startGoogleWarmup, startWarmup, type DomainAuthenticationResult, type DomainCheckEntry, type SmtpReadinessResult, type WarmupResult } from "@/app/actions";
 import { ContactEnrollmentPanel } from "@/components/dashboard/contact-enrollment-panel";
 import { ContactsPagePanel } from "@/components/dashboard/contacts-page-panel";
 import { SequenceBuilderPanel } from "@/components/dashboard/sequence-builder-panel";
@@ -15,7 +15,7 @@ import type {
   DashboardSender,
 } from "@/lib/services/dashboard";
 
-export type DashboardView = "activity" | "approvals" | "contacts" | "infrastructure" | "overview" | "pipeline" | "sequences";
+export type DashboardView = "activity" | "approvals" | "contacts" | "infrastructure" | "overview" | "pipeline" | "sent" | "sequences";
 
 type BrandFilter = "aesthetic" | "all" | "hvac";
 type IconName = "activity" | "arrow" | "check" | "clock" | "edit" | "inbox" | "mail" | "pipeline" | "shield" | "users";
@@ -64,6 +64,19 @@ function SequenceName({ value }: { value: string }) {
   if (normalized === "hvac_a") return <>A305 A</>;
   if (normalized === "hvac_b") return <>A305 B</>;
   return <>{formatLabel(value)}</>;
+}
+
+function formatEasternDateTime(value: string | null): string {
+  if (!value) return "Time unavailable";
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+    timeZone: "America/New_York",
+    timeZoneName: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function formatTimestamp(value: string | null): string {
@@ -162,6 +175,8 @@ export function OutreachDashboard({
   const matchesBrand = (campaign: string) => activeBrand === "all" || campaign === activeBrand;
   const filteredPipeline = dashboardData.pipeline.filter((row) => matchesBrand(row.campaign));
   const filteredHolds = dashboardData.holdQueue.filter((item) => matchesBrand(item.campaign));
+  const filteredFirstTouches = dashboardData.heldFirstTouches.filter((item) => matchesBrand(item.campaign));
+  const filteredSent = dashboardData.sentMail.filter((item) => matchesBrand(item.campaign));
   const filteredQueue = dashboardData.queue.filter((item) => matchesBrand(item.campaign));
   const filteredActivities = dashboardData.activities.filter((item) => matchesBrand(item.campaign));
   const filteredSenders = dashboardData.senders.filter(
@@ -190,6 +205,21 @@ export function OutreachDashboard({
       window.removeEventListener("keydown", closeOverlay);
     };
   }, [isReplyPanelOpen, selectedQueueItem]);
+
+  function handleApproveAll(sequenceId: string, sequenceName: string, count: number) {
+    const confirmed = window.confirm(
+      `Approve all ${count} held first touch${count === 1 ? "" : "es"} in ${sequenceName}? This does not send email. They become eligible for the next send run.`,
+    );
+    if (!confirmed) return;
+    setPendingHoldId(sequenceId);
+    startReviewTransition(async () => {
+      const result = await approveHeldFirstTouches(sequenceId);
+      setNotice(result.message);
+      setPendingHoldId(null);
+      if (result.ok) router.refresh();
+      window.setTimeout(() => setNotice(""), 3200);
+    });
+  }
 
   function handleHoldReview(enrollmentId: string, decision: "approve" | "skip") {
     setPendingHoldId(enrollmentId);
@@ -261,6 +291,7 @@ export function OutreachDashboard({
           <Link className={view === "pipeline" ? "active" : ""} href="/pipeline"><Icon name="pipeline" />Pipeline</Link>
           <Link className={view === "sequences" ? "active" : ""} href="/sequences"><Icon name="edit" />Sequences</Link>
           <Link className={view === "approvals" ? "active" : ""} href="/approvals"><Icon name="shield" />Approvals<span>{selectedMetrics.held}</span></Link>
+          <Link className={view === "sent" ? "active" : ""} href="/sent"><Icon name="check" />Sent</Link>
           <Link className={view === "infrastructure" ? "active" : ""} href="/infrastructure"><Icon name="inbox" />Infrastructure</Link>
           <Link className={view === "activity" ? "active" : ""} href="/activity"><Icon name="mail" />Activity</Link>
         </nav>
@@ -320,6 +351,14 @@ export function OutreachDashboard({
 
           {view === "approvals" && <section className="panel hold-panel" id="approvals">
             <div className="panel-heading"><div><p className="section-kicker">APPROVAL MODE</p><h2>Hold queue</h2></div><span className={filteredHolds.length ? "attention-count" : ""}>{filteredHolds.length} held</span></div>
+            {filteredFirstTouches.length > 0 ? <div className="hold-list">
+              {filteredFirstTouches.map((batch) => (
+                <article className="hold-row" key={batch.sequenceId}>
+                  <div className="hold-contact"><div><strong><SequenceName value={batch.sequenceName} /></strong><BrandBadge campaign={batch.campaign} /></div><span>{batch.count} held first touch{batch.count === 1 ? "" : "es"} waiting, including any not shown below.</span></div>
+                  <div className="hold-actions"><button disabled={isReviewPending && pendingHoldId === batch.sequenceId} onClick={() => handleApproveAll(batch.sequenceId, batch.sequenceName, batch.count)} type="button">Approve all first touches</button></div>
+                </article>
+              ))}
+            </div> : null}
             <div className="hold-list">
               {filteredHolds.slice(0, 5).map((item) => (
                 <article className="hold-row" key={item.id}>
@@ -365,6 +404,15 @@ export function OutreachDashboard({
               {warmupResult ? <div className={`readiness-result ${warmupResult.ok ? "ready" : "not-ready"}`}><strong>{warmupResult.message}</strong></div> : null}
             </section>
           </div>}
+
+          {view === "sent" && <section className="panel" id="sent">
+            <div className="panel-heading"><div><p className="section-kicker">PROSPECT MAIL</p><h2>Sent</h2></div><span>{filteredSent.length} shown</span></div>
+            {filteredSent.length > 0 ? (
+              <div className="table-scroll"><table><thead><tr><th>When (America/New_York)</th><th>Mailbox</th><th>Recipient</th><th>Sequence</th><th>Step</th></tr></thead><tbody>
+                {filteredSent.map((item) => <tr key={item.id}><td><time dateTime={item.sentAt}>{formatEasternDateTime(item.sentAt)}</time></td><td>{item.mailbox}</td><td><strong>{item.recipientName}</strong><br />{item.recipient}</td><td><SequenceName value={item.sequenceName} /></td><td>{item.step}</td></tr>)}
+              </tbody></table></div>
+            ) : <EmptyState title="No prospect email sent yet" copy="Each send shows the mailbox, recipient, sequence, step, and Eastern time." />}
+          </section>}
 
           {view === "activity" && <div className="operations-grid" id="activity">
             <section className="panel queue-panel">

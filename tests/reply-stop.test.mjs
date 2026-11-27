@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { blockingSuppression, suppressionBlocks } from "../lib/services/send-block.js";
 import { imapHostForSmtpHost, isProspectReply } from "../lib/services/reply-match.js";
-import { mailboxesForSenders, syncProspectReplies } from "../lib/services/reply-sync.js";
+import { campaignsBlockedByReplyFailure, mailboxesForSenders, syncProspectReplies } from "../lib/services/reply-sync.js";
 import { isPermanentRecipientFailure } from "../lib/services/smtp-failure.js";
 import { stopContactForReply } from "../lib/services/stop-contact.js";
 
@@ -30,6 +30,19 @@ test("own mailboxes, seeds, and bounce daemons are not prospect replies", () => 
   assert.equal(imapHostForSmtpHost("smtp.gmail.com"), "imap.gmail.com");
   assert.equal(imapHostForSmtpHost("smtp.hostinger.com"), "imap.hostinger.com");
   assert.equal(imapHostForSmtpHost("smtp.example.com"), null);
+});
+
+test("one campaign's inbox failure does not block the other campaign", () => {
+  const blocked = campaignsBlockedByReplyFailure(
+    ["aesthetic", "hvac"],
+    [
+      { campaigns: ["aesthetic"], user: "matt@aestheticdevicepro.com" },
+      { campaigns: ["hvac"], user: "cam@automate305.com" },
+    ],
+    [{ mailbox: "matt@aestheticdevicepro.com" }],
+  );
+
+  assert.deepEqual(blocked, ["aesthetic"]);
 });
 
 test("aliases that share a login are polled once and a missing password is skipped", () => {
@@ -160,7 +173,10 @@ test("the reply cron is protected and the weekday send checks inboxes before mai
     "utf8",
   );
 
+  assert.ok(sendCron.indexOf("await resetSendsForEasternDay") < sendCron.indexOf("await campaignBlockedBySurbl"));
+  assert.ok(sendCron.indexOf("await resetSendsForEasternDay") < sendCron.indexOf("await syncProspectReplies"));
   assert.ok(sendCron.indexOf("syncProspectReplies") < sendCron.indexOf("/api/send"));
+  assert.match(sendCron, /recordOutboxRun/);
   assert.match(migration, /e\.status in \('active', 'held', 'paused'\)/);
   assert.match(migration, /when 'reply' then 'replied'/);
   assert.match(migration, /terminal_status <> 'replied'/);

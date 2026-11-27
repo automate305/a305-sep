@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   NO_ELIGIBLE_SENDER,
   SENDER_BLOCK_CODES,
+  campaignReadyFromVerdicts,
   createSenderGate,
   describeSenderState,
+  senderPoolAtCapacity,
 } from "../lib/services/sender-gate.js";
 
 const CREDENTIALS = {
@@ -91,6 +93,52 @@ test("never opens an SMTP connection to a mailbox that is still warming", async 
   await assert.rejects(() => gate.selectSender([matt, tamiko], "aesthetic"));
 
   assert.deepEqual(verifySender.attempted, []);
+});
+
+test("ignores a warming mailbox when a warmed sender is ready", async () => {
+  const warmedMatt = { ...matt, warmed: true };
+  const gate = createSenderGate({
+    environment: CREDENTIALS,
+    verifySender: recordingVerifier(),
+  });
+
+  const selected = await gate.selectSender([tamiko, warmedMatt], "aesthetic");
+
+  assert.equal(selected.email, "matt@aestheticdevicepro.com");
+});
+
+test("readiness ignores warming mailboxes and still requires one warmed sender", () => {
+  const warming = { email: "tamiko@aestheticdevicepro.com", permitted: false, warmed: false };
+  const ready = { email: "matt@aestheticdevicepro.com", permitted: true, warmed: true };
+  const unready = { email: "matt@aestheticdevicepro.com", permitted: false, warmed: true };
+
+  assert.deepEqual(campaignReadyFromVerdicts([warming, ready]), {
+    ignoredWarming: ["tamiko@aestheticdevicepro.com"],
+    ready: true,
+    readySenderCount: 1,
+  });
+  assert.equal(campaignReadyFromVerdicts([warming]).ready, false);
+  assert.equal(campaignReadyFromVerdicts([warming, unready]).ready, false);
+});
+
+test("capacity exhaustion is not a failed send", () => {
+  const atCap = {
+    blockedSenders: [{
+      blockedBy: [{ code: SENDER_BLOCK_CODES.DAILY_LIMIT_REACHED }],
+      warmed: true,
+    }],
+    code: NO_ELIGIBLE_SENDER,
+  };
+  const stillWarming = {
+    blockedSenders: [{
+      blockedBy: [{ code: SENDER_BLOCK_CODES.NOT_WARMED }],
+      warmed: false,
+    }],
+    code: NO_ELIGIBLE_SENDER,
+  };
+
+  assert.equal(senderPoolAtCapacity(atCap), true);
+  assert.equal(senderPoolAtCapacity(stillWarming), false);
 });
 
 test("still selects cam@automate305.com for hvac", async () => {

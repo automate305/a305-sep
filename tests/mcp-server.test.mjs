@@ -72,6 +72,8 @@ test("lists Outbox tools and refuses a send without the confirm phrase", async (
     "outbox_set_contact_status",
     "outbox_send_approved",
   ]);
+  const sendTool = reader.messages[1].result.tools.find((tool) => tool.name === "outbox_send_approved");
+  assert.equal(sendTool.inputSchema.properties.campaign.type, "string");
   assert.equal(reader.messages[2].result.isError, true);
   assert.match(reader.messages[2].result.content[0].text, /Refused/);
 });

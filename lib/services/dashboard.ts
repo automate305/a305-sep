@@ -37,8 +37,28 @@ export type DashboardHoldItem = {
   id: string;
   initials: string;
   name: string;
+  sequenceId: string | null;
   sequenceName: string;
   step: number;
+};
+
+export type HeldFirstTouchBatch = {
+  campaign: string;
+  count: number;
+  sequenceId: string;
+  sequenceName: string;
+};
+
+export type DashboardSentMail = {
+  campaign: string;
+  id: string;
+  mailbox: string;
+  recipient: string;
+  recipientName: string;
+  sentAt: string;
+  sequenceName: string;
+  step: number;
+  subject: string;
 };
 
 export type DashboardActivity = {
@@ -138,6 +158,7 @@ export type DashboardData = {
   contactCount: number;
   errorMessage: string | null;
   generatedAt: string;
+  heldFirstTouches: HeldFirstTouchBatch[];
   holdQueue: DashboardHoldItem[];
   metrics: {
     activeEnrollments: number;
@@ -158,6 +179,7 @@ export type DashboardData = {
   queue: DashboardQueueItem[];
   replies: DashboardReply[];
   senders: DashboardSender[];
+  sentMail: DashboardSentMail[];
   sequences: DashboardSequence[];
 };
 
@@ -234,6 +256,23 @@ type RawHoldItem = {
   hold_reason?: string | null;
   id: string;
   sequence: SequenceRelation | SequenceRelation[] | null;
+  sequence_id?: string | null;
+};
+
+type RawHeldFirstTouch = {
+  sequence: SequenceRelation | SequenceRelation[] | null;
+  sequence_id: string | null;
+};
+
+type RawSentMail = {
+  contact: ContactRelation | ContactRelation[] | null;
+  enrollment: { sequence: SequenceRelation | SequenceRelation[] | null } |
+    Array<{ sequence: SequenceRelation | SequenceRelation[] | null }> | null;
+  id: string;
+  sender: SenderRelation | SenderRelation[] | null;
+  sent_at: string;
+  step: number;
+  subject: string | null;
 };
 
 type RawActivity = {
@@ -320,6 +359,7 @@ function createEmptyDashboardData(errorMessage: string | null): DashboardData {
     contactCount: 0,
     errorMessage,
     generatedAt: new Date().toISOString(),
+    heldFirstTouches: [],
     holdQueue: [],
     metrics: {
       activeEnrollments: 0,
@@ -340,6 +380,7 @@ function createEmptyDashboardData(errorMessage: string | null): DashboardData {
     queue: [],
     replies: [],
     senders: [],
+    sentMail: [],
     sequences: [],
   };
 }
@@ -478,11 +519,18 @@ export async function getDashboardData(): Promise<DashboardData> {
         .eq("status", "sent").gte("sent_at", monthStart),
       supabase.from("enrollments").select("id", { count: "exact", head: true })
         .eq("status", "replied").gte("completed_at", monthStart),
+      supabase.from("enrollments")
+        .select("sequence_id,sequence:sequences(name,campaign)")
+        .eq("status", "held").eq("current_step", 1).limit(2000),
+      supabase.from("send_log")
+        .select("id,step,sent_at,subject,contact:contacts(email,first_name,last_name),sender:senders(email,campaign),enrollment:enrollments(sequence:sequences(name))")
+        .eq("status", "sent").gte("step", 1).order("sent_at", { ascending: false }).limit(200),
     ]);
 
     const [pipelineResult, sequenceResult, contactCountResult, queueResult, holdResult,
       activityResult, replyResult, senderResult,
-      sentTodayResult, failedTodayResult, sentMonthResult, repliedMonthResult] = results;
+      sentTodayResult, failedTodayResult, sentMonthResult, repliedMonthResult,
+      heldFirstTouchResult, sentMailResult] = results;
     const queryErrors = results.map((result) => result.error).filter(Boolean);
     if (queryErrors.length > 0) {
       throw new Error(queryErrors.map((error) => error?.message).join("; "));
@@ -496,6 +544,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     const replyRows = (replyResult.data || []) as unknown as RawReply[];
     const senderRows = (senderResult.data || []) as unknown as RawSender[];
     const sentTodayRows = (sentTodayResult.data || []) as unknown as RawSentMetric[];
+    const heldFirstTouchRows = (heldFirstTouchResult.data || []) as unknown as RawHeldFirstTouch[];
+    const sentMailRows = (sentMailResult.data || []) as unknown as RawSentMail[];
 
     const pipelineRowsBySequence = new Map(pipelineRows.map((row) => [row.sequence, row]));
     const pipeline: DashboardPipelineRow[] = sequenceRows.map((sequence) => {
@@ -563,8 +613,46 @@ export async function getDashboardData(): Promise<DashboardData> {
         id: item.id,
         initials: getInitials(name),
         name,
+        sequenceId: item.sequence_id || null,
         sequenceName: sequence?.name || "Unknown sequence",
         step: item.current_step,
+      };
+    });
+
+    const heldFirstTouchBatches = new Map<string, HeldFirstTouchBatch>();
+    for (const item of heldFirstTouchRows) {
+      if (!item.sequence_id) continue;
+      const sequence = getSingleRelation(item.sequence);
+      const existing = heldFirstTouchBatches.get(item.sequence_id);
+      if (existing) {
+        existing.count += 1;
+        continue;
+      }
+      heldFirstTouchBatches.set(item.sequence_id, {
+        campaign: sequence?.campaign || "general",
+        count: 1,
+        sequenceId: item.sequence_id,
+        sequenceName: sequence?.name || "Unknown sequence",
+      });
+    }
+    const heldFirstTouches = [...heldFirstTouchBatches.values()];
+
+    const sentMail: DashboardSentMail[] = sentMailRows.map((item) => {
+      const contact = getSingleRelation(item.contact);
+      const sender = getSingleRelation(item.sender);
+      const enrollment = getSingleRelation(item.enrollment);
+      const sequence = getSingleRelation(enrollment?.sequence || null);
+      const recipientName = getDisplayName(contact);
+      return {
+        campaign: sender?.campaign || sequence?.campaign || "general",
+        id: item.id,
+        mailbox: sender?.email || "Unknown mailbox",
+        recipient: contact?.email || "",
+        recipientName,
+        sentAt: item.sent_at,
+        sequenceName: sequence?.name || "Unknown sequence",
+        step: item.step,
+        subject: item.subject || "Email sent",
       };
     });
 
@@ -666,6 +754,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       contactCount: contactCountResult.count || 0,
       errorMessage: null,
       generatedAt: now.toISOString(),
+      heldFirstTouches,
       holdQueue,
       metrics: {
         activeEnrollments: brandMetrics.all.active,
@@ -688,6 +777,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       queue,
       replies,
       senders,
+      sentMail,
       sequences,
     };
   } catch (error) {

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 
-import { createSenderGate } from '../../lib/services/sender-gate.js'
+import { campaignReadyFromVerdicts, createSenderGate } from '../../lib/services/sender-gate.js'
 import { isUsableEnvironmentValue } from '../../lib/services/smtp.js'
 
 export default async function handler(req, res) {
@@ -66,17 +66,36 @@ export default async function handler(req, res) {
   const gate = createSenderGate()
 
   const senderResults = await Promise.all((activeSenders || []).map(async (sender) => {
+    // A mailbox that is still warming is not a campaign failure and is
+    // not opened over SMTP. The campaign is ready when one warmed
+    // mailbox is permitted.
+    if (!sender.warmed) {
+      return {
+        blockedBy: [],
+        campaign: sender.campaign,
+        credentialConfigured: null,
+        email: sender.email,
+        error: null,
+        ignored: true,
+        permitted: false,
+        provider: null,
+        smtpAuthenticated: null,
+        warmed: false
+      }
+    }
+
     const verdict = await gate.inspectSender(sender)
 
     return {
-      // Readiness asks "permitted", not "sendable": the daily counters
-      // are reset after this check, so today's remaining budget is not
-      // a readiness question.
+      // Readiness asks "permitted", not "sendable". Today's remaining
+      // budget is reset at the start of the weekday cron and is not a
+      // readiness question.
       blockedBy: verdict.permittedBlockedBy,
       campaign: verdict.campaign,
       credentialConfigured: verdict.credentialConfigured,
       email: verdict.email,
       error: verdict.error,
+      ignored: false,
       permitted: verdict.permitted,
       provider: verdict.provider,
       smtpAuthenticated: verdict.smtpAuthenticated,
@@ -84,13 +103,14 @@ export default async function handler(req, res) {
     }
   }))
 
-  const ready = senderResults.length > 0 && senderResults.every(
-    (sender) => sender.permitted
-  )
+  const decision = campaignReadyFromVerdicts(senderResults)
+  const ready = decision.ready
 
   return res.status(ready ? 200 : 503).json({
     checkedAt: new Date().toISOString(),
+    ignoredWarming: decision.ignoredWarming,
     ready,
+    readySenderCount: decision.readySenderCount,
     senders: senderResults,
     summary: {
       authenticated: senderResults.filter((sender) => sender.smtpAuthenticated).length,

@@ -4,8 +4,8 @@
 //   node scripts/daily-trigger.js
 //
 // What it does:
-//   1. Verifies active SMTP accounts without sending
-//   2. Resets sender daily counts in Supabase
+//   1. Resets sender daily counts in Supabase (America/New_York date)
+//   2. Verifies active SMTP accounts without sending
 //   3. Calls /api/send to process today's queue
 //   4. Prints a summary to your terminal
 // ============================================================
@@ -53,8 +53,8 @@ async function triggerSend() {
     weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
   })}\n`)
 
-  await checkSendingReadiness()
   await resetDailySends()
+  await checkSendingReadiness()
 
   console.log('📤 Triggering send webhook...\n')
 

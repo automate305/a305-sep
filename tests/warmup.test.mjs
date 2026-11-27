@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { TOTAL_WARMUP_DAYS, activeWarmupDay, describeSendError, warmupMessage, warmupProgress } from "../lib/services/warmup.ts";
+import { TOTAL_WARMUP_DAYS, activeWarmupDay, describeSendError, easternDayStart, warmupMessage, warmupProgress } from "../lib/services/warmup.ts";
 
 // Real send_log history for matt@/tamiko@aestheticdevicepro.com, captured
 // 30 Sep 2026. Active days: Sep 1,2,3,5,6,7,10,23,24 — 9 distinct days,
@@ -282,6 +282,13 @@ test("the board shows the real sending day, not calendar time since the start da
 test("the estimated graduation is today plus the sending days still needed", () => {
   assert.equal(warmupProgress(1, false, "2026-11-09T20:52:53Z", NOW).projectedGraduation, "2026-12-06T22:00:00.000Z");
   assert.equal(warmupProgress(TOTAL_WARMUP_DAYS, false, "2026-09-07T00:00:00Z", NOW).projectedGraduation, "2026-11-09T22:00:00.000Z");
+});
+
+test("eastern midnight uses the America/New_York offset, including standard time", () => {
+  assert.equal(easternDayStart(new Date("2026-01-15T15:00:00Z")), "2026-01-15T00:00:00-05:00");
+  assert.equal(easternDayStart(new Date("2026-07-15T15:00:00Z")), "2026-07-15T00:00:00-04:00");
+  assert.equal(easternDayStart(new Date("2026-11-27T15:00:00Z")), "2026-11-27T00:00:00-05:00");
+  assert.equal(easternDayStart(new Date("2026-01-16T03:30:00Z")), "2026-01-15T00:00:00-05:00");
 });
 
 test("a warmed sender shows the full ramp and no estimate", () => {

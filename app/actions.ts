@@ -11,10 +11,10 @@ import {
   setDashboardSession,
 } from "@/lib/services/dashboard-auth";
 import {
-  getSmtpPasswordEnvironmentVariable,
   getSmtpTransportSettings,
   getSmtpVerificationError,
   isUsableEnvironmentValue,
+  resolveSmtpPassword,
   verifySmtpSender,
 } from "@/lib/services/smtp.js";
 import { parseContactCsv } from "@/lib/utils/contact-import.js";
@@ -151,9 +151,9 @@ export async function runSmtpReadinessCheck(): Promise<SmtpReadinessResult> {
   if (error) return { message: "Unable to load active mailboxes.", ready: false, senders: [] };
 
   const senders = await Promise.all((activeSenders || []).map(async (sender) => {
-    const passwordName = getSmtpPasswordEnvironmentVariable(sender.email);
+    const { password, variable: passwordName } = resolveSmtpPassword(sender.email);
     const provider = getSmtpTransportSettings(sender).provider;
-    if (!isUsableEnvironmentValue(process.env[passwordName])) {
+    if (!isUsableEnvironmentValue(password)) {
       return { email: sender.email, error: `Missing ${passwordName}`, provider, status: "unavailable" as const };
     }
     try {

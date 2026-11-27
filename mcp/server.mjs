@@ -100,11 +100,12 @@ const TOOLS = [
   },
   {
     name: 'outbox_send_approved',
-    description: 'Process the already-approved queue. Held first touches are not included. Requires confirm set to send-approved-queue.',
+    description: 'Process the already-approved queue. Held first touches are not included. Requires confirm set to send-approved-queue. Optional campaign limits the run to one campaign, which still has to have its automation switch on.',
     inputSchema: {
       type: 'object',
       properties: {
-        confirm: { type: 'string' }
+        confirm: { type: 'string' },
+        campaign: { type: 'string', description: 'Optional campaign slug, such as aesthetic or hvac.' }
       },
       required: ['confirm'],
       additionalProperties: false
@@ -205,7 +206,13 @@ async function callTool(name, args) {
         error: `Refused. Pass confirm "${SEND_CONFIRM}" to process the approved queue.`
       }), true)
     }
-    const result = await outbox('/api/send', { method: 'POST', body: {} })
+    const campaign = typeof args.campaign === 'string' && /^[a-z0-9_]+$/.test(args.campaign)
+      ? `?campaign=${encodeURIComponent(args.campaign)}`
+      : ''
+    if (args.campaign && !campaign) {
+      return toolResult(JSON.stringify({ error: 'Invalid campaign filter' }), true)
+    }
+    const result = await outbox(`/api/send${campaign}`, { method: 'POST', body: { campaign: args.campaign || undefined } })
     return toolResult(JSON.stringify(result.body), !result.ok)
   }
   return toolResult(JSON.stringify({ error: `Unknown tool ${name}` }), true)

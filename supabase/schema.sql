@@ -44,6 +44,8 @@ alter table senders add column if not exists bounce_score            int;
 alter table senders add column if not exists complaint_score         int;
 alter table senders add column if not exists postmaster_score        int;
 alter table senders add column if not exists reply_score             int;
+alter table senders add column if not exists warmed_at               timestamptz;
+alter table senders add column if not exists sends_today_on          date;
 
 -- The two real mailboxes start inactive until warmup is complete. Aliases remain
 -- inactive because they are not independent warmup capacity.
@@ -434,8 +436,11 @@ create table if not exists send_log (
   status        text not null default 'sent',
   -- 'sent' | 'bounced' | 'failed' | 'opened' | 'replied'
   sent_at       timestamptz default now(),
-  error_message text
+  error_message text,
+  message_id    text
 );
+
+alter table send_log add column if not exists message_id text;
 
 create index if not exists send_log_enrollment_id_idx
   on send_log (enrollment_id);
@@ -448,13 +453,34 @@ create index if not exists send_log_template_id_idx
 
 -- ── DAILY RESET FUNCTION ─────────────────────────────────────
 -- Call this via a Supabase cron job or your webhook at midnight
+-- Zero today's counter only when it still belongs to an earlier
+-- America/New_York date. A second call on the same ET date is a no-op.
 create or replace function reset_daily_sends()
 returns void
-language sql
+language plpgsql
 set search_path = ''
 as $$
-  update public.senders set sends_today = 0;
+begin
+  update public.senders
+  set sends_today = 0,
+      sends_today_on = (timezone('America/New_York', now()))::date
+  where sends_today_on is distinct from (timezone('America/New_York', now()))::date;
+end;
 $$;
+
+create table if not exists outbox_run_log (
+  id          uuid primary key default gen_random_uuid(),
+  run_at      timestamptz not null default now(),
+  job         text not null,
+  campaign    text,
+  status      text not null,
+  stop_reason text,
+  counts      jsonb not null default '{}'::jsonb,
+  details     jsonb not null default '{}'::jsonb
+);
+
+create index if not exists outbox_run_log_run_at_idx
+  on outbox_run_log (run_at desc);
 
 -- ── USEFUL VIEWS ─────────────────────────────────────────────
 
@@ -527,6 +553,7 @@ alter table enrollments enable row level security;
 alter table send_log    enable row level security;
 alter table templates   enable row level security;
 alter table sequences   enable row level security;
+alter table outbox_run_log enable row level security;
 
 -- Service-role requests bypass RLS. Browser roles receive no table grants or
 -- permissive policies, so operational data and contact PII stay server-only.
@@ -538,13 +565,13 @@ drop policy if exists "service_role_all" on templates;
 drop policy if exists "service_role_all" on sequences;
 
 revoke all on table senders, contacts, enrollments, send_log, templates,
-  sequences from anon, authenticated;
+  sequences, outbox_run_log from anon, authenticated;
 revoke all on table todays_queue, available_senders, pipeline_summary
   from anon, authenticated;
 
 grant usage on schema public to service_role;
 grant select, insert, update, delete on table senders, contacts, enrollments,
-  send_log, templates, sequences to service_role;
+  send_log, templates, sequences, outbox_run_log to service_role;
 grant select on table todays_queue, available_senders, pipeline_summary
   to service_role;
 

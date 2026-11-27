@@ -189,8 +189,9 @@ test("the send route tracks after the postal-address hold and before sendMail", 
 
 test("the message id is the send_log id, and warmup mail is never tracked", async () => {
   const source = await readFile(new URL("../pages/api/send.js", import.meta.url), "utf8");
-  assert.match(source, /const messageId = randomUUID\(\)/);
-  assert.match(source, /insert\(\{\s+id:\s+messageId,/);
+  assert.match(source, /const sendLogId = randomUUID\(\)/);
+  assert.match(source, /messageId: sendLogId,/);
+  assert.match(source, /const logRow = \{\s+id:\s+sendLogId,/);
 
   const warmup = await readFile(new URL("../lib/services/warmup.ts", import.meta.url), "utf8");
   assert.doesNotMatch(warmup, /tracking/i);

@@ -259,8 +259,45 @@ export async function reviewHeldMessage(
   if (!data) return { message: "This hold was already reviewed.", ok: false };
 
   revalidatePath("/");
+  revalidatePath("/approvals");
   return {
     message: decision === "approve" ? "Approved for the next send run." : "Skipped and paused.",
+    ok: true,
+  };
+}
+
+export async function approveHeldFirstTouches(sequenceId: string): Promise<HoldReviewResult> {
+  if (!(await hasDashboardAccess())) {
+    return { message: "Dashboard session expired. Unlock it again.", ok: false };
+  }
+  if (!enrollmentIdPattern.test(sequenceId)) {
+    return { message: "Choose a valid sequence.", ok: false };
+  }
+
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return { message: "Supabase is not configured.", ok: false };
+
+  const { data, error } = await supabase
+    .from("enrollments")
+    .update({
+      next_send_date: getEasternDate(),
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: "dashboard",
+      status: "active",
+    })
+    .eq("sequence_id", sequenceId)
+    .eq("status", "held")
+    .eq("current_step", 1)
+    .select("id");
+
+  if (error) return { message: `Review failed: ${error.message}`, ok: false };
+  const approved = (data || []).length;
+  revalidatePath("/");
+  revalidatePath("/approvals");
+  return {
+    message: approved === 0
+      ? "No held first touches were waiting in that sequence."
+      : `Approved ${approved} held first touch${approved === 1 ? "" : "es"}. No email was sent.`,
     ok: true,
   };
 }

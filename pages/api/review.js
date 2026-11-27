@@ -20,10 +20,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  const confirmAll = req.body?.confirm === 'approve-all-held'
+  const sequenceId = String(req.body?.sequence_id || '')
   const enrollmentId = String(req.body?.enrollment_id || '')
   const decision = req.body?.decision
-  if (!ENROLLMENT_ID.test(enrollmentId) || !['approve', 'skip'].includes(decision)) {
+  if (!confirmAll && (!ENROLLMENT_ID.test(enrollmentId) || !['approve', 'skip'].includes(decision))) {
     return res.status(400).json({ error: 'enrollment_id and decision (approve or skip) are required' })
+  }
+  if (confirmAll && !ENROLLMENT_ID.test(sequenceId)) {
+    return res.status(400).json({ error: 'sequence_id is required to approve held first touches' })
   }
 
   const supabaseUrl = process.env.SUPABASE_URL
@@ -35,6 +40,31 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   })
+
+  if (confirmAll) {
+    const { data, error } = await supabase
+      .from('enrollments')
+      .update({
+        next_send_date: easternDate(),
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: 'api',
+        status: 'active'
+      })
+      .eq('sequence_id', sequenceId)
+      .eq('status', 'held')
+      .eq('current_step', 1)
+      .select('id')
+
+    if (error) return res.status(503).json({ error: 'Review failed' })
+    const approved = (data || []).length
+    return res.status(200).json({
+      approved,
+      message: `Approved ${approved} held first touch${approved === 1 ? '' : 'es'}. No email was sent.`,
+      sequence_id: sequenceId,
+      status: 'active'
+    })
+  }
+
   const nextStatus = decision === 'approve' ? 'active' : 'paused'
   const { data, error } = await supabase
     .from('enrollments')

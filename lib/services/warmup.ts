@@ -57,8 +57,23 @@ function easternDateKey(date: Date) {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
-function easternDayStart() {
-  return `${easternDateKey(new Date())}T00:00:00-04:00`;
+// Offset of America/New_York for the civil date that contains `now`.
+// DST transitions are at 02:00 local, so noon UTC on that date is never
+// inside the overlap or the gap.
+export function easternOffset(dateKey: string): string {
+  const probe = new Date(`${dateKey}T12:00:00Z`);
+  const name = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    timeZoneName: "shortOffset",
+  }).formatToParts(probe).find((part) => part.type === "timeZoneName")?.value || "";
+  const match = name.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  if (!match) return "-05:00";
+  return `${match[1]}${match[2].padStart(2, "0")}:${match[3] || "00"}`;
+}
+
+export function easternDayStart(now: Date = new Date()): string {
+  const key = easternDateKey(now);
+  return `${key}T00:00:00${easternOffset(key)}`;
 }
 
 function recipients() {
